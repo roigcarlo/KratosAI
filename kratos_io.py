@@ -15,7 +15,6 @@ import KratosMultiphysics.gid_output_process as GOP
 
 no_dw = 200
 no_up = 0
-valid = 0.8
 
 def read_snapshot_from_h5py(file_path, variables):
     data = {}

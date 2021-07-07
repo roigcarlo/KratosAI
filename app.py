@@ -12,7 +12,8 @@ import tensorflow as tf
 from keras import layers
 from itertools import repeat
 
-import io, network
+import kratos_io
+import shallow_autoencoder
 
 import matplotlib.pyplot as plt
 
@@ -49,8 +50,8 @@ if __name__ == "__main__":
         # "hdf5_output/result_100.h5",
     ]
 
-    kratos_network = network.KratosNN()
-    S = io.build_snapshot_grid(
+    kratos_network = shallow_autoencoder.ShallowAutoencoder()
+    S = kratos_io.build_snapshot_grid(
         data_inputs, 
         [
             # "PRESSURE", 
@@ -143,5 +144,5 @@ if __name__ == "__main__":
     current_model = KMP.Model()
     model_part = current_model.CreateModelPart("main_model_part")
 
-    io.create_out_mdpa(model_part, "GidExampleSwaped")
-    io.print_results_to_gid(model_part, S.T, SP.T)
+    kratos_io.create_out_mdpa(model_part, "GidExampleSwaped")
+    kratos_io.print_results_to_gid(model_part, S.T, SP.T)
