@@ -58,8 +58,9 @@ class Network(abc.ABC):
         unshuffled_data = data.copy()
 
         ### Training experiment ###
-        train_cut = len(data) / num_files
 
+        # Select some of the snapshots to train and some others to validate
+        train_cut = len(data) / num_files
         train_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) <  (train_cut * self.valid)]
         valid_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) >= (train_cut * self.valid)]
 
@@ -69,14 +70,16 @@ class Network(abc.ABC):
         train_dataset = np.asarray(train_samples)
         valid_dataset = np.asarray(valid_samples)
 
+        # Shuffle the snapshots to prevent batches from the same clusters
         np.random.shuffle(train_dataset)
         np.random.shuffle(valid_dataset)
 
+        # Train the model
         model.fit(
             train_dataset, train_dataset,
             epochs=50,
-            batch_size=1, # int(370*0.7),
-            shuffle=True,
+            batch_size=1,
+            shuffle=True,                                   # Probably not needed as we already shuffle.
             validation_data=(valid_dataset, valid_dataset),
         )
 
