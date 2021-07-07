@@ -25,6 +25,18 @@ class Network(abc.ABC):
     def define_network(self, input_data, custom_loss):
         """ Define the network configuration """
 
+    @abc.abstractmethod
+    def calculate_gradients(self, input_data, encoder, decoder, lossf, trainable_variables):
+        """ Compute the gradients of the input network list for the given input variables """
+
+    @abc.abstractmethod
+    def compute_full_gradient(self, network, all_gradients):
+        """ Operates all gradients fir the given input variables """
+
+    def check_gradient(self, SEncoded, SDecoded):
+        """ Checks the correctness of a given gradient """
+        print("Method not implemented.")
+
     def prepare_data(self, input_data):
         self.data_min = np.min(input_data)
         self.data_max = np.max(input_data)
@@ -77,22 +89,3 @@ class Network(abc.ABC):
         tmp2 = predicted_vector.T
 
         return np.asarray(predicted_vector.T)
-
-    @abc.abstractmethod
-    def calculate_gradients(self, input_data, encoder, decoder, lossf, trainable_variables):
-        """ Compute the gradients of the input network list for the given input variables """
-
-    @abc.abstractmethod
-    def compute_full_gradient(self, network, all_gradients):
-        """ Operates all gradients fir the given input variables """
-
-    def generate_perturbation(self, encoded_snapshot):
-
-        pert_sample = np.random.rand(encoded_snapshot.shape[0])
-        pert_magnitude = np.linalg.norm(encoded_snapshot)
-
-        return pert_sample * pert_magnitude
-
-    def check_gradient(self, SEncoded, SDecoded):
-        """ Checks the correctness of a given gradient """
-        print("Method not implemented.")
