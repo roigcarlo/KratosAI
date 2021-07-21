@@ -95,7 +95,7 @@ if __name__ == "__main__":
     decoder.summary()
     autoencoder.summary()
 
-    kratos_network.prepare_data(SReduced)
+    kratos_network.calculate_data_limits(SReduced)
 
     if train_model:
         kratos_network.train_network(autoencoder, SReduced, len(data_inputs))

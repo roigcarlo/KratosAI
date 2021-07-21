@@ -37,25 +37,19 @@ class Network(abc.ABC):
         """ Checks the correctness of a given gradient """
         print("Method not implemented.")
 
-    def prepare_data(self, input_data):
+    def calculate_data_limits(self, input_data):
         self.data_min = np.min(input_data)
         self.data_max = np.max(input_data)
 
-    def train_network(self, model, input_data, num_files):
+    def prepare_data(self, input_data):
         data = np.transpose(input_data)
 
         print("Data shape:", data.shape)
-
-        self.data_min = np.min(data)
-        self.data_max = np.max(data)
-
         print("RAW - Min:", np.min(data), "Max:", np.max(data))
-        
+
         data = (data - self.data_min) / (self.data_max - self.data_min)
 
         print("NOR - Min:", np.min(data), "Max:", np.max(data))
-
-        unshuffled_data = data.copy()
 
         # Select some of the snapshots to train and some others to validate
         train_cut = len(data) / num_files
@@ -67,6 +61,11 @@ class Network(abc.ABC):
 
         train_dataset = np.asarray(train_samples)
         valid_dataset = np.asarray(valid_samples)
+
+        return train_dataset, valid_dataset
+
+    def train_network(self, model, input_data, num_files):
+        train_dataset, valid_dataset = self.prepare_data(input_data, num_files)
 
         # Shuffle the snapshots to prevent batches from the same clusters
         np.random.shuffle(train_dataset)
@@ -82,38 +81,13 @@ class Network(abc.ABC):
         )
 
     def train_with_gradient(self, network, loss, input_data, num_files):
-        data = np.transpose(input_data)
-
-        print("Data shape:", data.shape)
-
-        self.data_min = np.min(data)
-        self.data_max = np.max(data)
-
-        print("RAW - Min:", np.min(data), "Max:", np.max(data))
-        
-        data = (data - self.data_min) / (self.data_max - self.data_min)
-
-        print("NOR - Min:", np.min(data), "Max:", np.max(data))
-
-        unshuffled_data = data.copy()
-
-        ### Training experiment ###
-
-        # Select some of the snapshots to train and some others to validate
-        train_cut = len(data) / num_files
-        train_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) <  (train_cut * self.valid)]
-        valid_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) >= (train_cut * self.valid)]
-
-        train_samples = np.array(train_pre)
-        valid_samples = np.array(valid_pre)
-
-        train_dataset = np.asarray(train_samples)
-        valid_dataset = np.asarray(valid_samples)
+        train_dataset, valid_dataset = self.prepare_data(input_data, num_files)
 
         # Shuffle the snapshots to prevent batches from the same clusters
         np.random.shuffle(train_dataset)
         np.random.shuffle(valid_dataset)
 
+        # Train the model
         epochs = 2
         for epoch in range(epochs):
             print("\nStart of epoch %d" % (epoch,))
