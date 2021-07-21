@@ -90,6 +90,14 @@ def create_out_mdpa(model_part, file_name):
 
     KMP.ModelPartIO(file_name, import_flags).ReadModelPart(model_part)
 
+def print_npy_snapshot(snapshot_matrix, do_transpose=False):
+    with open("snapshot.npy", "wb") as npy_file:
+        to_save_data = snapshot_matrix.copy()
+        if do_transpose:
+            to_save_data = to_save_data.T
+
+        np.save(npy_file, to_save_data)
+
 def print_results_to_gid(model_part, snapshot_matrix, predicted_matrix):
 
     gid_output = GOP.GiDOutputProcess(
