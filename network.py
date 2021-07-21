@@ -83,6 +83,75 @@ class Network(abc.ABC):
             validation_data=(valid_dataset, valid_dataset),
         )
 
+    def train_with_gradient(self, network, loss, input_data, num_files):
+        data = np.transpose(input_data)
+
+        print("Data shape:", data.shape)
+
+        self.data_min = np.min(data)
+        self.data_max = np.max(data)
+
+        print("RAW - Min:", np.min(data), "Max:", np.max(data))
+        
+        data = (data - self.data_min) / (self.data_max - self.data_min)
+
+        print("NOR - Min:", np.min(data), "Max:", np.max(data))
+
+        unshuffled_data = data.copy()
+
+        ### Training experiment ###
+
+        # Select some of the snapshots to train and some others to validate
+        train_cut = len(data) / num_files
+        train_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) <  (train_cut * self.valid)]
+        valid_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) >= (train_cut * self.valid)]
+
+        train_samples = np.array(train_pre)
+        valid_samples = np.array(valid_pre)
+
+        train_dataset = np.asarray(train_samples)
+        valid_dataset = np.asarray(valid_samples)
+
+        # Shuffle the snapshots to prevent batches from the same clusters
+        np.random.shuffle(train_dataset)
+        np.random.shuffle(valid_dataset)
+
+        epochs = 2
+        for epoch in range(epochs):
+            print("\nStart of epoch %d" % (epoch,))
+
+            # Iterate over the batches of the dataset.
+            for step, (x_batch_train, y_batch_train) in enumerate(train_dataset):
+
+                # Open a GradientTape to record the operations run
+                # during the forward pass, which enables auto-differentiation.
+                with tf.GradientTape() as tape:
+
+                    # Run the forward pass of the layer.
+                    # The operations that the layer applies
+                    # to its inputs are going to be recorded
+                    # on the GradientTape.
+                    logits = model(x_batch_train, training=True)  # Logits for this minibatch
+
+                    # Compute the loss value for this minibatch.
+                    loss_value = loss_fn(y_batch_train, logits)
+
+                # Use the gradient tape to automatically retrieve
+                # the gradients of the trainable variables with respect to the loss.
+                grads = tape.gradient(loss_value, model.trainable_weights)
+
+                # Run one step of gradient descent by updating
+                # the value of the variables to minimize the loss.
+                optimizer.apply_gradients(zip(grads, model.trainable_weights))
+
+                # Log every 200 batches.
+                if step % 200 == 0:
+                    print(
+                        "Training loss (for one batch) at step %d: %.4f"
+                        % (step, float(loss_value))
+                    )
+                    print("Seen so far: %s samples" % ((step + 1) * batch_size))
+
     def predict_vector(self, network, input_vector):
 
         tmp = input_vector.reshape(1,len(input_vector))
