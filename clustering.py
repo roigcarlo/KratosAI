@@ -86,20 +86,20 @@ def calcualte_snapshots(snapshot_matrix, number_of_clusters=1, add_overlapping=F
         sub_snapshots = add_overlapping(snapshot_matrix, sub_snapshots, number_of_clusters, kmeans)
 
     # Calcualte the svd of each cluster and obtain its modes
-    Bases={}
+    bases={}
     truncation_tolerance = 1e-4
 
     for i in range(number_of_clusters):
-        Bases[i],s,_,_ = RandomizedSingularValueDecomposition().Calculate(sub_snapshots[i],truncation_tolerance)
+        bases[i],s,_,_ = RandomizedSingularValueDecomposition().Calculate(sub_snapshots[i],truncation_tolerance)
 
         if save_to_file:
-            np.save(f'bases_{i+1}.npy', Bases[i])
+            np.save(f'bases_{i+1}.npy', bases[i])
 
             # # In case we want to control if its saved on binary/Ascii, etc...
             # with open("bases_"+str(i)+".npy", "wb") as bases_file:
             #     np.save(bases_file, Bases[i])
 
-    return Bases, sub_snapshots
+    return bases, sub_snapshots
 
 # if __name__=='__main__':
 #     #clustering parameters
