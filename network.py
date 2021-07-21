@@ -57,8 +57,6 @@ class Network(abc.ABC):
 
         unshuffled_data = data.copy()
 
-        ### Training experiment ###
-
         # Select some of the snapshots to train and some others to validate
         train_cut = len(data) / num_files
         train_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) <  (train_cut * self.valid)]

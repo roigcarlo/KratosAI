@@ -13,6 +13,7 @@ from keras import layers
 from itertools import repeat
 
 import kratos_io
+import clustering
 import shallow_autoencoder
 
 import matplotlib.pyplot as plt
@@ -33,10 +34,10 @@ if __name__ == "__main__":
     load_model = False
     
     data_inputs = [
-        # "hdf5_output/result_30.h5",
-        # "hdf5_output/result_35.h5",
-        # "hdf5_output/result_40.h5",
-        # "hdf5_output/result_45.h5",
+        "hdf5_output/result_30.h5",
+        "hdf5_output/result_35.h5",
+        "hdf5_output/result_40.h5",
+        "hdf5_output/result_45.h5",
         "hdf5_output/result_50.h5",
         "hdf5_output/result_55.h5",
         "hdf5_output/result_60.h5",
@@ -44,10 +45,10 @@ if __name__ == "__main__":
         "hdf5_output/result_70.h5",
         "hdf5_output/result_75.h5",
         "hdf5_output/result_80.h5",
-        # "hdf5_output/result_85.h5",
-        # "hdf5_output/result_90.h5",
-        # "hdf5_output/result_95.h5",
-        # "hdf5_output/result_100.h5",
+        "hdf5_output/result_85.h5",
+        "hdf5_output/result_90.h5",
+        "hdf5_output/result_95.h5",
+        "hdf5_output/result_100.h5",
     ]
 
     kratos_network = shallow_autoencoder.ShallowAutoencoder()
@@ -58,6 +59,9 @@ if __name__ == "__main__":
             "VELOCITY"
         ]
     )
+
+    kratos_io.print_npy_snapshot(S, True)
+    exit()
 
     print("S", S.shape)
 
@@ -98,6 +102,12 @@ if __name__ == "__main__":
 
     if save_model:
         autoencoder.save(kratos_network.model_name)
+
+    # Obtain Clusters
+    cluster_bases = clustering.calcualte_snapshots(
+        snapshot_matrix=S,
+        number_of_clusters=5
+    )
         
     # Obtain Decoder/Encoder Derivatives.
     snapshot_index = 5
