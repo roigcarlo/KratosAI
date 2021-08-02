@@ -41,7 +41,7 @@ class Network(abc.ABC):
         self.data_min = np.min(input_data)
         self.data_max = np.max(input_data)
 
-    def prepare_data(self, input_data):
+    def prepare_data(self, input_data, num_files):
         data = np.transpose(input_data)
 
         print("Data shape:", data.shape)
@@ -74,7 +74,7 @@ class Network(abc.ABC):
         # Train the model
         model.fit(
             train_dataset, train_dataset,
-            epochs=50,
+            epochs=5,
             batch_size=1,
             shuffle=True,                                   # Probably not needed as we already shuffle.
             validation_data=(valid_dataset, valid_dataset),

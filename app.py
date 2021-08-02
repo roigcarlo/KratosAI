@@ -3,6 +3,8 @@ from __future__ import print_function, absolute_import, division #makes KratosMu
 import json
 import math
 
+import contextlib
+
 import h5py
 import numpy as np
 
@@ -38,17 +40,17 @@ if __name__ == "__main__":
         "hdf5_output/result_35.h5",
         "hdf5_output/result_40.h5",
         "hdf5_output/result_45.h5",
-        "hdf5_output/result_50.h5",
-        "hdf5_output/result_55.h5",
-        "hdf5_output/result_60.h5",
-        "hdf5_output/result_65.h5",
-        "hdf5_output/result_70.h5",
-        "hdf5_output/result_75.h5",
-        "hdf5_output/result_80.h5",
-        "hdf5_output/result_85.h5",
-        "hdf5_output/result_90.h5",
-        "hdf5_output/result_95.h5",
-        "hdf5_output/result_100.h5",
+        # "hdf5_output/result_50.h5",
+        # "hdf5_output/result_55.h5",
+        # "hdf5_output/result_60.h5",
+        # "hdf5_output/result_65.h5",
+        # "hdf5_output/result_70.h5",
+        # "hdf5_output/result_75.h5",
+        # "hdf5_output/result_80.h5",
+        # "hdf5_output/result_85.h5",
+        # "hdf5_output/result_90.h5",
+        # "hdf5_output/result_95.h5",
+        # "hdf5_output/result_100.h5",
     ]
 
     kratos_network = shallow_autoencoder.ShallowAutoencoder()
@@ -61,11 +63,12 @@ if __name__ == "__main__":
     )
 
     kratos_io.print_npy_snapshot(S, True)
-    exit()
 
     print("S", S.shape)
 
-    U,sigma,_,error = RandomizedSingularValueDecomposition().Calculate(S,1e-6)
+    print("=== Calculating Randomized Singular Value Decomposition ===")
+    with contextlib.redirect_stdout(None):
+        U,sigma,_,error = RandomizedSingularValueDecomposition().Calculate(S,1e-6)
 
     print("U", U.shape)
 
@@ -103,11 +106,29 @@ if __name__ == "__main__":
     if save_model:
         autoencoder.save(kratos_network.model_name)
 
+    # Use the network
+    SEncoded = kratos_network.encode_snapshot(encoder, SReduced) # This is q,  or g(u)
+    SDecoded = kratos_network.decode_snapshot(decoder, SEncoded) # This is u', or f(q), or f(g(u)) 
+
+    # Verify that results are correct
+    SPredict = kratos_network.predict_snapshot(autoencoder, SReduced) # This is u', or f(q), or f(g(u)) 
+
+    # This should be 0.
+    if np.count_nonzero(SDecoded - SPredict):
+        print("[ERROR]: Autoencoder != Decoder·Encoder")
+
     # Obtain Clusters
-    cluster_bases = clustering.calcualte_snapshots(
-        snapshot_matrix=S,
-        number_of_clusters=5
-    )
+    num_clusters=5
+    print("=== Calculating Cluster Bases ===")
+    with contextlib.redirect_stdout(None):
+        cluster_bases = clustering.calcualte_snapshots(
+            snapshot_matrix=S,
+            number_of_clusters=num_clusters
+        )
+
+    print(" -> Generated {} cluster bases with shapes:".format(len(cluster_bases)))
+    for base in cluster_bases:
+        print(len(base[0]))
         
     # Obtain Decoder/Encoder Derivatives.
     snapshot_index = 5
@@ -120,17 +141,20 @@ if __name__ == "__main__":
 
     full_gradient = kratos_network.compute_full_gradient(autoencoder, all_gradients)
 
-    SEncoded = kratos_network.encode_snapshot(encoder, SReduced) # This is q,  or g(u)
-    SDecoded = kratos_network.decode_snapshot(decoder, SEncoded) # This is u', or f(q), or f(g(u)) 
-
-    # Verify that results are correct
-    SPredict = kratos_network.predict_snapshot(autoencoder, SReduced) # This is u', or f(q), or f(g(u)) 
-
-    # This should be 0.
-    if np.count_nonzero(SDecoded - SPredict):
-        print("[ERROR]: Autoencoder != Decoder·Encoder")
+    print("Gradient shape at index {}: {}".format(snapshot_index, full_gradient.shape))
 
     SP = U@SDecoded
+
+    # Train over the gradients?
+
+    def gradient_loss(y_true, y_pred):
+        # We train against minimizing the distance to a cluster?
+
+        # MISSING IMPLEMENTATION
+
+        return  y_diff
+
+    exit(0)
 
     # kratos_network.check_gradient(SEncoded, SDecoded)
 
