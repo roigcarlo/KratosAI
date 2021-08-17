@@ -31,9 +31,6 @@ def print_gpu_info():
         tf.config.experimental.set_memory_growth(device, True)
 
 if __name__ == "__main__":
-
-    save_model = True
-    load_model = False
     
     data_inputs = [
         "hdf5_output/result_30.h5",
@@ -52,6 +49,12 @@ if __name__ == "__main__":
         # "hdf5_output/result_95.h5",
         # "hdf5_output/result_100.h5",
     ]
+
+    config = {
+        "load_model":   False,
+        "train_model":  True,
+        "save_model":   True,
+    }
 
     kratos_network = shallow_autoencoder.ShallowAutoencoder()
     S = kratos_io.build_snapshot_grid(
@@ -82,11 +85,7 @@ if __name__ == "__main__":
 
         return  y_diff
 
-    load_model = False
-    train_model = True
-    save_model = True
-
-    if load_model:
+    if config["load_model"]:
         autoencoder = tf.keras.models.load_model(kratos_network.model_name, custom_objects={"custom_loss":custom_loss})
     else:
         autoencoder = kratos_network.define_network(SReduced, custom_loss )
@@ -100,18 +99,18 @@ if __name__ == "__main__":
 
     kratos_network.calculate_data_limits(SReduced)
 
-    if train_model:
+    if config["train_model"]:
         kratos_network.train_network(autoencoder, SReduced, len(data_inputs))
 
-    if save_model:
+    if config["save_model"]:
         autoencoder.save(kratos_network.model_name)
 
     # Use the network
-    SEncoded = kratos_network.encode_snapshot(encoder, SReduced) # This is q,  or g(u)
-    SDecoded = kratos_network.decode_snapshot(decoder, SEncoded) # This is u', or f(q), or f(g(u)) 
+    SEncoded = kratos_network.encode_snapshot(encoder, SReduced)        # This is q,  or g(u)
+    SDecoded = kratos_network.decode_snapshot(decoder, SEncoded)        # This is u', or f(q), or f(g(u)) 
 
     # Verify that results are correct
-    SPredict = kratos_network.predict_snapshot(autoencoder, SReduced) # This is u', or f(q), or f(g(u)) 
+    SPredict = kratos_network.predict_snapshot(autoencoder, SReduced)   # This is u', or f(q), or f(g(u)) 
 
     # This should be 0.
     if np.count_nonzero(SDecoded - SPredict):
@@ -154,7 +153,7 @@ if __name__ == "__main__":
 
         return  y_diff
 
-    exit(0)
+    # exit(0)
 
     # kratos_network.check_gradient(SEncoded, SDecoded)
 

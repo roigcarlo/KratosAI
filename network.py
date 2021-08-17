@@ -74,7 +74,7 @@ class Network(abc.ABC):
         # Train the model
         model.fit(
             train_dataset, train_dataset,
-            epochs=5,
+            epochs=50,
             batch_size=1,
             shuffle=True,                                   # Probably not needed as we already shuffle.
             validation_data=(valid_dataset, valid_dataset),
