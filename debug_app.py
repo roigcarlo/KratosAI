@@ -252,12 +252,14 @@ def example_custom_loss():
 
 def example_tf():
 
+    # Custom loss function
     def tf_loss(y_true, y_pred):
         y_diff = y_pred - y_true
         y_diff = y_diff ** 2
 
         return y_diff
 
+    # Inherit from Keral model so we can use the existing model.fit
     class LossGradientModel(keras.Model):
         def train_step(self, data):
             x, y = data
@@ -306,6 +308,8 @@ def example_tf():
 
     print("\n\tPhi:\n", phi)
 
+    print("\nPreparing Model:\n")
+
     # Im using linear because weights can be negative and I will set optimal values (no train)
     encoder_input  = layers.Input(shape=matrix_input.shape[0], dtype='float64', name="encoder_input")
     encoder_output = layers.Dense(reduced_dimension, activation='linear', dtype='float64', name="encoder_layer_1")(encoder_input)
@@ -320,7 +324,7 @@ def example_tf():
 
     print("\nAssigning optimal weights:\n")
 
-    # 0 is the input layer
+    # autoencoder.layers[0] is the input layer
     weights_l0 = autoencoder.layers[1].get_weights()
     weights_l1 = autoencoder.layers[2].get_weights()
 
