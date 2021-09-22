@@ -261,6 +261,9 @@ def example_tf():
 
     # Inherit from Keral model so we can use the existing model.fit
     class LossGradientModel(keras.Model):
+        def save_model_gradient(self, model_gradient):
+            self.model_gradient = model_gradient
+
         def train_step(self, data):
             x, y = data
 
@@ -272,10 +275,11 @@ def example_tf():
                 # Feed forward
                 y_pred = self(x_tensor, training=True)
                 dy_dx = tape.gradient(y_pred, x_tensor)
-                print("===> Calculated Model Gradient:", dy_dx)
-
+        
                 # Continue the normal training loop
                 loss_value = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+            self.save_model_gradient(dy_dx)
 
             # Calculate the loss gradient
             gradients = tape.gradient(loss_value, self.trainable_variables)
@@ -294,6 +298,9 @@ def example_tf():
             return {m.name: m.result() for m in self.metrics}
 
     full_dimension = 10
+
+    # Fix the seed otherwise debug is painfull
+    tf.random.set_seed(1)
 
     matrix_input = tf.random.normal(shape=(full_dimension, 5), dtype='float64')
     matrix_input = matrix_input.numpy()
@@ -320,7 +327,9 @@ def example_tf():
     decoder_output = layers.Dense(full_dimension,    activation='linear', dtype='float64', name="decoder_layer_1")(decoder_input)
 
     autoencoder = LossGradientModel(encoder_input, decoder_output, name="autoencoder")
-    autoencoder.compile(loss=tf_loss, optimizer=tf.keras.optimizers.Adam(lr=0.0001, amsgrad=False))
+
+    # Needs to run eagerly for debug
+    autoencoder.compile(loss=tf_loss, optimizer=tf.keras.optimizers.Adam(lr=0.0001, amsgrad=False), run_eagerly=True)
     autoencoder.summary()
 
     print("\nAssigning optimal weights:\n")
@@ -345,7 +354,7 @@ def example_tf():
     autoencoder.layers[1].set_weights([phi,   np.zeros(shape=weights_l0[1].shape)])
     autoencoder.layers[2].set_weights([phi.T, np.zeros(shape=weights_l1[1].shape)])
 
-    print("\nPreparing datasets")
+    print("\nPreparing datasets:")
 
     train_dataset = matrix_input.T
     valid_dataset = matrix_input.T
@@ -361,6 +370,8 @@ def example_tf():
         validation_data=(valid_dataset, valid_dataset),
     )
 
+    print("\n\tModel Gradient:\n\t\t", autoencoder.model_gradient)
+
     print("\nPredicting the input:")
     matrix_predicted = autoencoder.predict(matrix_input.T)
     matrix_predicted = matrix_predicted.T
@@ -368,9 +379,7 @@ def example_tf():
     print("\n\tNorm error:\n")
     print("\t\t", np.linalg.norm(matrix_predicted-matrix_input)/np.linalg.norm(matrix_input))
 
-
     exit()
-
 
 if __name__ == "__main__":
 
