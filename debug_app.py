@@ -272,6 +272,7 @@ def example_tf():
                 # Feed forward
                 y_pred = self(x_tensor, training=True)
                 dy_dx = tape.gradient(y_pred, x_tensor)
+                print("===> Calculated Model Gradient:", dy_dx)
 
                 # Continue the normal training loop
                 loss_value = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
@@ -394,60 +395,3 @@ if __name__ == "__main__":
     example_tf()
 
     exit(0)
-
-    #####################
-    
-    data_inputs = [
-        "hdf5_output/result_30.h5",
-    ]
-
-    input = tf.random.normal(shape=(5, 5))
-
-    print("\n =========================================================== ")
-    print("\n === Calculating Cluster Bases                           === ")
-    print("\n =========================================================== ")
-    input, cluster = calculate_clusters(input)
-
-    print("\n =========================================================== ")
-    print("\n === Calculating Randomized Singular Value Decomposition === ")
-    print("\n =========================================================== ")
-    U, sigma, phi, error = calculate_svd(input)
-
-    ######################
-
-    ######################
-
-    input = tf.random.normal(shape=(2, 1))
-    enc_input = tf.Variable(input)
-
-    W = tf.random.normal(shape=(1, 2))
-    benc = tf.random.normal(shape=(1, 1))
-
-    with tf.GradientTape() as tape:
-        # tape.watch(W)
-        # tape.watch(b)
-
-        print("W:", W)
-        print("b:", benc)
-        print("Relu in:", W@enc_input + benc)
-
-        encoder_out = tf.nn.relu(W@enc_input + benc)
-
-        print("Relu:", encoder_out)
-
-        # decoder_in = encoder_out
-        # decoder = W.T@decoder_in + bdec
-
-        grad_encoder = tape.gradient(encoder_out, enc_input)
-
-        # loss = norm(decoder_out - encoder_in) + norm(grad_encoder - G)
-        # Dloss/Dw   ,   Dloss, benc
-
-        print("Gradi", grad_encoder)
-
-    ######################
-
-    # print("input shape:", np.shape(input))
-    # predicted = encoder(input)
-
-    # print("Predicted:", predicted)
