@@ -41,8 +41,13 @@ class Network(abc.ABC):
         self.data_min = np.min(input_data)
         self.data_max = np.max(input_data)
 
+    def expand_dataset(self, data, times):
+        noise_data = np.tile(data, (times, 1))
+        noise_data = noise_data + np.random.normal(0, 0.1, noise_data.shape)
+        return np.concatenate((data, noise_data), axis=0)
+
     def prepare_data(self, input_data, num_files):
-        data = np.transpose(input_data)
+        data = np.transpose(input_data[0])
 
         print("Data shape:", data.shape)
         print("RAW - Min:", np.min(data), "Max:", np.max(data))
@@ -53,11 +58,14 @@ class Network(abc.ABC):
 
         # Select some of the snapshots to train and some others to validate
         train_cut = len(data) / num_files
+
         train_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) <  (train_cut * self.valid)]
         valid_pre = [data[i] for i in range(0, data.shape[0]) if (i % train_cut) >= (train_cut * self.valid)]
 
         train_samples = np.array(train_pre)
         valid_samples = np.array(valid_pre)
+
+        train_samples = self.expand_dataset(train_samples)
 
         train_dataset = np.asarray(train_samples)
         valid_dataset = np.asarray(valid_samples)
@@ -74,7 +82,7 @@ class Network(abc.ABC):
         # Train the model
         model.fit(
             train_dataset, train_dataset,
-            epochs=50,
+            epochs=1,
             batch_size=1,
             shuffle=True,                                   # Probably not needed as we already shuffle.
             validation_data=(valid_dataset, valid_dataset),

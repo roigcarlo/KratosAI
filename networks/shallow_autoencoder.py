@@ -5,8 +5,8 @@ import numpy as np
 import keras
 import tensorflow as tf
 
-import network
 import utils
+import networks.network as network
 
 from keras import layers
 
@@ -27,9 +27,7 @@ class ShallowAutoencoder(network.Network):
     def create_encoder(self, input_dim, output_dim):
         encoder_input = keras.Input(shape=(input_dim,), dtype='float64', name="encoder_input")
 
-        x = layers.Dense(output_dim * 8, activation='relu', dtype='float64', name="encoder_hidden_1")(encoder_input)
-        x = layers.Dense(output_dim * 4, activation='relu', dtype='float64', name="encoder_hidden_2")(x)
-        x = layers.Dense(output_dim * 2, activation='relu', dtype='float64', name="encoder_hidden_3")(x)
+        x = layers.Dense(output_dim, activation='linear', dtype='float64', name="encoder_hidden_1")(encoder_input)
 
         encoded = layers.Dense(output_dim, activation='relu', dtype='float64', name="encoder_output")(x)
         encoder = keras.Model(encoder_input, encoded, name = "encoder")
@@ -39,9 +37,7 @@ class ShallowAutoencoder(network.Network):
     def create_decoder(self, input_dim, output_dim):
         decoder_input = keras.Input(shape=(input_dim,), name="decoder_input")
 
-        x = layers.Dense(input_dim * 2, activation='relu', dtype='float64', name="decoder_hidden_1")(decoder_input)
-        x = layers.Dense(input_dim * 4, activation='relu', dtype='float64', name="decoder_hidden_2")(x)
-        x = layers.Dense(input_dim * 8, activation='relu', dtype='float64', name="decoder_hidden_3")(x)
+        x = layers.Dense(input_dim, activation='linear', dtype='float64', name="decoder_hidden_1")(decoder_input)
 
         decoded = layers.Dense(output_dim,  activation='sigmoid', dtype='float64', name="decoder_output")(x)
         decoder = keras.Model(decoder_input, decoded, name="decoder")
