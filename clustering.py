@@ -101,6 +101,35 @@ def calcualte_snapshots(snapshot_matrix, number_of_clusters=1, add_overlapping=F
 
     return bases, sub_snapshots
 
+def calcualte_snapshots_with_columns(snapshot_matrix, number_of_clusters=1, number_of_columns_in_the_basis=None):
+
+    # Clustering
+    kmeans = KMeans(n_clusters=number_of_clusters).fit(snapshot_matrix.T)
+    # Add random_state=0 to the KMeans initialization to get consistent results
+
+    # Split snapshots into sub-sets
+    sub_snapshots={}
+    for i in range(number_of_clusters):
+        sub_snapshots[i] = snapshot_matrix[:,kmeans.labels_==i]
+
+    # Calcualte the svd of each cluster and obtain its modes
+    bases={}
+    q = {}
+    if number_of_columns_in_the_basis is None:
+        truncation_tolerance = 1e-4
+    else:
+        truncation_tolerance = 0
+
+    for i in range(number_of_clusters):
+        bases[i],_,_,_ = RandomizedSingularValueDecomposition().Calculate(sub_snapshots[i],truncation_tolerance)
+        if number_of_columns_in_the_basis is not None:
+            if bases[i].shape[1]<number_of_columns_in_the_basis:
+                raise Exception(f'There are no {number_of_columns_in_the_basis} linearly independent columns spaning the range of cluster {i}')
+            bases[i] = bases[i][:,:number_of_columns_in_the_basis]
+        #np.save(f'bases_{i+1}.npy', bases[i])
+
+    return bases, kmeans
+
 # if __name__=='__main__':
 #     #clustering parameters
 #     SnapshotMatrix = np.load('snapshot_matrix.npy')
