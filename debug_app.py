@@ -60,12 +60,10 @@ def calculate_svd(input):
         U,sigma,phi,error = RandomizedSingularValueDecomposition().Calculate(input, 1e-6)
     return U,sigma,phi,error
 
-def calculate_clusters(input):
+def calculate_clusters_with_columns(input, num_clusters, num_cluster_col):
     data_rows = input.shape[0]
     data_cols = input.shape[1]
 
-    num_clusters=3
-    num_cluster_col=2
     with contextlib.redirect_stdout(None):
         cluster_bases, kmeans_object = clustering.calcualte_snapshots_with_columns(
             snapshot_matrix=input,
@@ -73,28 +71,43 @@ def calculate_clusters(input):
             number_of_columns_in_the_basis=num_cluster_col
         )
 
-    print(" -> Generated {} cluster bases with shapes:".format(len(cluster_bases)))
-    for base in cluster_bases:
-        print(base, "-->", cluster_bases[base].shape)
+    return cluster_bases, kmeans_object
 
-    q = {}
+def calculate_clusters(input, num_clusters, num_cluster_col):
+    data_rows = input.shape[0]
+    data_cols = input.shape[1]
+
+    with contextlib.redirect_stdout(None):
+        cluster_bases, kmeans_object = clustering.calcualte_snapshots_with_columns(
+            snapshot_matrix=input,
+            number_of_clusters=num_clusters,
+            number_of_columns_in_the_basis=num_cluster_col
+        )
+
+    # print(" -> Generated {} cluster bases with shapes:".format(len(cluster_bases)))
+    # for base in cluster_bases:
+    #     print(base, "-->", cluster_bases[base].shape)
+
     s = {}
+    q = {}
+    g = {}
     total_respresentations = 0
     for i in range(num_clusters):
         s[i] = input[:,kmeans_object.labels_==i]
-        q[i] = cluster_bases[i].T @ input[:,kmeans_object.labels_==i]
+        q[i] = cluster_bases[i].T @ input[:,kmeans_object.labels_==i] 
+        g[i] = cluster_bases[i] @ cluster_bases[i].T  
         total_respresentations += np.shape(q[i])[1]
-
-    print("Total number of representations:", total_respresentations)
 
     sc = np.empty(shape=(data_rows,0))
     qc = np.empty(shape=(num_cluster_col,0))
+    gc = np.empty(shape=(data_rows, 0))
 
     for i in range(num_clusters):
         sc = np.concatenate((sc, s[i]), axis=1)
         qc = np.concatenate((qc, q[i]), axis=1)
+        gc = np.concatenate((gc, g[i]), axis=1)
 
-    return sc, qc
+    return sc, qc, gc
 
 def example_w():
     a = np.array([1,2,3])
@@ -264,22 +277,59 @@ def example_tf():
         def save_model_gradient(self, model_gradient):
             self.model_gradient = model_gradient
 
+        def save_model_weights(self, model_weights):
+            self.model_weights = model_weights
+
+        def tf_gradient_loss(self, y_true, y_pred, m_grad, m_pred):
+            y_diff = y_pred - y_true
+            y_diff = y_diff ** 2
+
+            m_diff = m_pred - m_grad
+            m_diff = m_diff ** 2
+
+            return tf.math.reduce_mean(y_diff) + k * tf.math.reduce_mean(m_diff)
+
         def train_step(self, data):
             x, y = data
 
             with tf.GradientTape(persistent=True) as tape:
                 # Create tensor to calculate the model gradient
                 x_tensor = tf.convert_to_tensor(x, dtype='float32')
+                # x_tensor = tf.cast(x, dtype='float64')
+                
                 tape.watch(x_tensor)
 
                 # Feed forward
-                y_pred = self(x_tensor, training=True)
-                dy_dx = tape.gradient(y_pred, x_tensor)
-        
-                # Continue the normal training loop
-                loss_value = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+                W  = self.layers[1].get_weights()
+                WT = self.layers[2].get_weights()
 
-            self.save_model_gradient(dy_dx)
+                Wt  = tf.Variable(W[0],  dtype='float64')
+                WTt = tf.Variable(WT[0], dtype='float64')
+
+                # tape.watch(Wt)
+                # tape.watch(WTt)
+
+                #y_pred = Wt@WTt@tf.transpose(x_tensor)
+                y_pred = self(x_tensor, training=True)
+
+                g = []
+                for i in range(y_pred.shape[1]):
+                    gi = tape.gradient(y_pred[0][i], x_tensor)
+                    g.append(gi)
+                # dy_dx = dy_dW @ dy_dWT
+                
+                # xy_xx = self.ideal_gradient
+                # yy_yx = Wt @ WTt
+                # print(dy_dW, dy_dWT)
+                print(g)
+
+                # Continue the normal training loop
+                # loss_value = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+                loss_value = self.tf_gradient_loss(x_tensor, y_pred, xy_xx, yy_yx)
+                # loss_value = tf.constant(0)
+
+            self.save_model_gradient(g)
+            # self.save_model_weights(yy_yx)
 
             # Calculate the loss gradient
             gradients = tape.gradient(loss_value, self.trainable_variables)
@@ -289,7 +339,7 @@ def example_tf():
             
             # Update weights
             # Temporaly comment this because I know training will only make it worse
-            # self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+            self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
             # Update metrics (includes the metric that tracks the loss)
             self.compiled_metrics.update_state(y, y_pred)
@@ -297,23 +347,41 @@ def example_tf():
             # Return a dict mapping metric names to current value
             return {m.name: m.result() for m in self.metrics}
 
-    full_dimension = 10
+    full_dimension  = 10
+    num_snapshots   = 20
+    n_columns       = 10
 
     # Fix the seed otherwise debug is painfull
     tf.random.set_seed(1)
 
-    matrix_input = tf.random.normal(shape=(full_dimension, 5), dtype='float64')
-    matrix_input = matrix_input.numpy()
+    v1_input = tf.random.normal(shape=(full_dimension, 1), dtype='float64')
+    v2_input = tf.random.normal(shape=(full_dimension, 1), dtype='float64')
+
+    v1_input = v1_input.numpy()
+    v2_input = v2_input.numpy()
+
+    lambdas = tf.random.normal(shape=(n_columns, 2), dtype='float64')
+
+    lambdas = lambdas.numpy()
+
+    matrix_input = np.zeros(shape=(full_dimension, n_columns))
+    for i in range(n_columns):
+        matrix_input[:,i] = (v1_input * lambdas[i, 0] + v2_input * lambdas[i, 1]).reshape(full_dimension)
+
+    # matrix_input = matrix_input.numpy()
+    # matrix_disto = matrix_disto.numpy()
 
     U,S,V = np.linalg.svd(matrix_input)
 
-    reduced_dimension = len(S)
+    # We can trim this to make the results worst
+    reduced_dimension = 2# len(S)
 
     print("\n\tU:\n", U)
     print("\n\tS:\n", S)
     
     phi = U[:,0:reduced_dimension]
 
+    print("\n\tPhi Shap:\n", phi.shape)
     print("\n\tPhi:\n", phi)
 
     print("\nPreparing Model:\n")
@@ -351,35 +419,161 @@ def example_tf():
         exit(1)
 
     # Bias is set to 0 because network is optimal
-    autoencoder.layers[1].set_weights([phi,   np.zeros(shape=weights_l0[1].shape)])
-    autoencoder.layers[2].set_weights([phi.T, np.zeros(shape=weights_l1[1].shape)])
+    noise_factor = 1e-5
+    autoencoder.layers[1].set_weights([phi   + tf.random.normal(phi.shape)   * noise_factor, np.zeros(shape=weights_l0[1].shape)])
+    autoencoder.layers[2].set_weights([phi.T + tf.random.normal(phi.T.shape) * noise_factor, np.zeros(shape=weights_l1[1].shape)])
+
+    print("\n\tClusters:")
+    reorder_inputs, clusters, grads = calculate_clusters(matrix_input, 1, reduced_dimension)
+    print("\n\tC:", reorder_inputs.shape, reorder_inputs[0])
+    print("\n\tK:", clusters.shape,  clusters[0])
+    print("\n\tG:", grads.shape,   grads)
+    autoencoder.ideal_gradient = grads
 
     print("\nPreparing datasets:")
 
-    train_dataset = matrix_input.T
-    valid_dataset = matrix_input.T
+    train_dataset = reorder_inputs.T
+    valid_dataset = reorder_inputs.T
+
+    target_dataset = reorder_inputs.T
 
     print("\n\t Train dataset shape:\n\t\t", train_dataset.shape)
 
     print("\n''Fake'' training phase")
     autoencoder.fit(
         train_dataset, train_dataset,
-        epochs=10,
+        epochs=500,
         batch_size=1,
         shuffle=True,
         validation_data=(valid_dataset, valid_dataset),
     )
 
-    print("\n\tModel Gradient:\n\t\t", autoencoder.model_gradient)
+    # print("\n\tModel Gradient:\n\t\t", autoencoder.model_gradient)
+    print("\n\tModel Weights:\n\t\t", autoencoder.model_weights)
 
     print("\nPredicting the input:")
-    matrix_predicted = autoencoder.predict(matrix_input.T)
+    matrix_predicted = autoencoder.predict(reorder_inputs.T)
     matrix_predicted = matrix_predicted.T
 
+    print("\nPrediction of column 0:")
+    print("\n\tOrg:\n\t\t", reorder_inputs.T[0])
+    print("\n\tPre:\n\t\t", matrix_predicted.T[0])
+
     print("\n\tNorm error:\n")
-    print("\t\t", np.linalg.norm(matrix_predicted-matrix_input)/np.linalg.norm(matrix_input))
+    print("\t\t", np.linalg.norm(matrix_predicted-reorder_inputs)/np.linalg.norm(reorder_inputs))
 
     exit()
+
+def example_custom_grad():
+
+    # Create a compositor to extend Keras layers with gradient function
+    def GradExtender(base, call_fnc, grad_fnc):
+        class LayerExtension(base):
+            def __init__(self, *args, **kwargs):
+                super(LayerExtension, self).__init__(*args, **kwargs)
+
+        LayerExtension.call_grad = grad_fnc
+        LayerExtension.call_base = LayerExtension.call
+        LayerExtension.call = call_fnc 
+
+        return LayerExtension
+
+    def LineGrad(self, outputs):
+        grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
+        for i in range(outputs.shape[1]):
+            grad_vals[i,i] = 1.0
+
+        gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+        
+        return gradient
+
+    def ReluGrad(self, outputs):
+        grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
+        for i in range(outputs.shape[1]):
+            if outputs[0,i] > 0:
+                grad_vals[i:i] = 1.0
+
+        gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+
+        return gradient
+
+    def CallWithGrads(self, inputs):
+        outputs = self.call_base(inputs)
+        self.gradient = self.call_grad(outputs)
+        return outputs
+
+    # Create a custom Model:
+    loss_tracker = keras.metrics.Mean(name="loss")
+    mae_metric = keras.metrics.MeanAbsoluteError(name="mae")
+
+    class GradModel(keras.Sequential):
+        def grad_loss(self, y_true, y_pred):
+            return (y_true - y_pred) ** 2
+
+        def train_step(self, data):
+            x, y = data
+
+            with tf.GradientTape() as tape:
+                # Forward pass
+                y_pred = self(x, training=True)
+
+                # Compute our own loss
+                # loss = keras.losses.mean_squared_error(y, y_pred)
+                loss = self.grad_loss(a, self.layers[0].weights[0])
+
+            # Compute gradients
+            trainable_vars = self.trainable_variables
+            gradients = tape.gradient(loss, trainable_vars)
+
+            # Update weights
+            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+            # Compute our own metrics
+            loss_tracker.update_state(loss)
+            mae_metric.update_state(y, y_pred)
+            return {"loss": loss_tracker.result(), "mae": mae_metric.result()}
+
+        @property
+        def metrics(self):
+            # We list our `Metric` objects here so that `reset_states()` can be
+            # called automatically at the start of each epoch
+            # or at the start of `evaluate()`.
+            # If you don't implement this property, you have to call
+            # `reset_states()` yourself at the time of your choosing.
+            return [loss_tracker, mae_metric]
+
+    # Create GradientLayers Protos
+    LineLayerProto = GradExtender(keras.layers.Dense, CallWithGrads, LineGrad)
+    ReLULayerProto = GradExtender(keras.layers.Dense, CallWithGrads, ReluGrad)
+
+    ### Sample Run ###
+
+    num_samples = 100
+
+    a     = np.array([[1.0, 2.0], [3.0, 4.0]])
+    input = tf.random.normal(shape=(num_samples, 2)) 
+
+    exact_result = input @ a
+
+    model = GradModel(
+        [
+            LineLayerProto(2, activation="relu", name="LinearDense")
+        ]
+    )
+
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.1, amsgrad=False),
+        run_eagerly=True
+    )
+
+    model.fit(
+        input, exact_result,
+        epochs=2,
+        batch_size=1
+    )
+
+    print(model.layers[0].weights)
+    
 
 if __name__ == "__main__":
 
@@ -398,9 +592,14 @@ if __name__ == "__main__":
     # print("\n =========================================================== ")
     # example_mockup()
 
+    # print("\n =========================================================== ")
+    # print("\n === Executing Custom Loss Example...                    === ")
+    # print("\n =========================================================== ")
+    # example_tf()
+
     print("\n =========================================================== ")
-    print("\n === Executing Custom Loss Example...                    === ")
+    print("\n === Executing Custom Grad Example...                    === ")
     print("\n =========================================================== ")
-    example_tf()
+    example_custom_grad()
 
     exit(0)
