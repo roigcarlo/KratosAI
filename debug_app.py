@@ -483,7 +483,10 @@ def example_custom_grad():
         for i in range(outputs.shape[1]):
             grad_vals[i,i] = 1.0
 
-        gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+        if self.use_bias:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        else:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
         
         return gradient
 
@@ -493,7 +496,10 @@ def example_custom_grad():
             if outputs[0,i] > 0:
                 grad_vals[i:i] = 1.0
 
-        gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+        if self.use_bias:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        else:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
 
         return gradient
 
@@ -557,7 +563,7 @@ def example_custom_grad():
 
     model = GradModel(
         [
-            LineLayerProto(2, activation="relu", name="LinearDense")
+            LineLayerProto(num_vars, activation="relu", name="LinearDense", use_bias=True)
         ]
     )
 
@@ -574,6 +580,131 @@ def example_custom_grad():
 
     print(model.layers[0].weights)
     
+def example_custom_grad_multi_layer():
+
+    # Create a compositor to extend Keras layers with gradient function
+    def GradExtender(base, call_fnc, grad_fnc):
+        class LayerExtension(base):
+            def __init__(self, *args, **kwargs):
+                super(LayerExtension, self).__init__(*args, **kwargs)
+
+        LayerExtension.call_grad = grad_fnc
+        LayerExtension.call_base = LayerExtension.call
+        LayerExtension.call = call_fnc 
+
+        return LayerExtension
+
+    def LineGrad(self, outputs):
+        grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
+        for i in range(outputs.shape[1]):
+            grad_vals[i,i] = 1.0
+
+        if self.use_bias:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        else:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+
+        return gradient
+
+    def ReluGrad(self, outputs):
+        grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
+        for i in range(outputs.shape[1]):
+            if outputs[0,i] > 0:
+                grad_vals[i:i] = 1.0
+
+        if self.use_bias:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        else:
+            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+
+        return gradient
+
+    def CallWithGrads(self, inputs):
+        outputs = self.call_base(inputs)
+        self.gradient = self.call_grad(outputs)
+        return outputs
+
+    # Create a custom Model:
+    loss_tracker = keras.metrics.Mean(name="loss")
+    mae_metric = keras.metrics.MeanAbsoluteError(name="mae")
+
+    class GradModel(keras.Sequential):
+        def diff_loss(self, y_true, y_pred):
+            return (y_true - y_pred) ** 2
+
+        def grad_loss(self, y_true, y_pred):
+            return (y_true - y_pred) ** 2
+
+        def train_step(self, data):
+            x, y = data
+
+            with tf.GradientTape() as tape:
+                # Forward pass
+                y_pred = self(x, training=True)
+
+                # Compute our own loss
+                # loss = self.diff_loss(y, y_pred)
+                loss = self.grad_loss(a, self.layers[0].gradient)
+
+            # Compute gradients
+            trainable_vars = self.trainable_variables
+            gradients = tape.gradient(loss, trainable_vars)
+
+            # Update weights
+            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+            # Compute our own metrics
+            loss_tracker.update_state(loss)
+            mae_metric.update_state(y, y_pred)
+            return {"loss": loss_tracker.result(), "mae": mae_metric.result()}
+
+        @property
+        def metrics(self):
+            # We list our `Metric` objects here so that `reset_states()` can be
+            # called automatically at the start of each epoch
+            # or at the start of `evaluate()`.
+            # If you don't implement this property, you have to call
+            # `reset_states()` yourself at the time of your choosing.
+            return [loss_tracker, mae_metric]
+
+    # Create GradientLayers Protos
+    LineLayerProto = GradExtender(keras.layers.Dense, CallWithGrads, LineGrad)
+    ReLULayerProto = GradExtender(keras.layers.Dense, CallWithGrads, ReluGrad)
+
+    ### Sample Run ###
+
+    num_samples = 100
+    num_vars    = 2
+
+    a     = np.array([[1.0, 2.0], [3.0, 4.0]])
+    # a     = tf.random.normal(shape=(num_vars, 1))
+    input = tf.abs(tf.random.normal(shape=(num_samples, num_vars)))
+
+    print("Input Shape:", input.shape)
+
+    exact_result = input @ a
+
+    model = GradModel(
+        [
+            LineLayerProto(num_vars, activation="relu", name="LinearDense", use_bias=True)
+        ]
+    )
+
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.01, amsgrad=False),
+        run_eagerly=True
+    )
+
+    model.fit(
+        input, exact_result,
+        epochs=50,
+        batch_size=1
+    )
+
+    # print("SP norm error", np.linalg.norm(SP-S)/np.linalg.norm(S))
+
+    print("\nA:", exact_result[0], "\nB:", model(np.array([input[0]])))
+    # print(model.layers[0].weights)
 
 if __name__ == "__main__":
 
@@ -597,9 +728,15 @@ if __name__ == "__main__":
     # print("\n =========================================================== ")
     # example_tf()
 
+    # print("\n =========================================================== ")
+    # print("\n === Executing Custom Grad Example...                    === ")
+    # print("\n =========================================================== ")
+    # example_custom_grad()
+
     print("\n =========================================================== ")
     print("\n === Executing Custom Grad Example...                    === ")
     print("\n =========================================================== ")
-    example_custom_grad()
+    example_custom_grad_multi_layer()
+
 
     exit(0)
