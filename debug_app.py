@@ -730,11 +730,11 @@ def example_custom_grad_multi_layer():
 
     ### Sample Run ###
 
-    num_vars = 8
-    num_samples = num_vars * 50
+    num_vars = 1024
+    num_samples = 100
 
     full_size = num_vars
-    enc_size = 8
+    enc_size = 10
 
     normalized1, norm1 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(num_vars, enc_size))))
     normalized2, norm2 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(enc_size, num_vars))))
@@ -774,8 +774,6 @@ def example_custom_grad_multi_layer():
         batch_size=1
     )
 
-    print("\nResults:")
-    print("\nCalc:", exact_result[0], "\nPred:", model(np.array([input[0]])))
     print("\nGradients:")
     m_grad_pred = model.layers[0].weights[0]
     print("\nLayer0:", model.layers[0].weights[0])
@@ -783,6 +781,12 @@ def example_custom_grad_multi_layer():
         print("\nLayer"+str(i)+";", model.layers[i].weights[0])
         m_grad_pred = m_grad_pred @ model.layers[i].weights[0]
     print("\nIdeal:", m_grad, "\nNet  :", m_grad_pred)
+
+    print("\nResults:")
+    expect = exact_result[0]
+    result = model(np.array([input[0]]))
+    print("\nCalc:", expect, "\nPred:", result)
+    print("\nCompression:", (1-enc_size/num_vars)*100, "%\tNorm Error:", np.linalg.norm(expect-result)/np.linalg.norm(expect))
 
 if __name__ == "__main__":
 
