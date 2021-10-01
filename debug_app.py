@@ -582,6 +582,25 @@ def example_custom_grad():
     
 def example_custom_grad_multi_layer():
 
+    def GenInputAsDependentColumns():
+        # Fix the seed otherwise debug is painfull
+        tf.random.set_seed(1)
+
+        v1_input = tf.random.normal(shape=(full_dimension, 1), dtype='float64')
+        v2_input = tf.random.normal(shape=(full_dimension, 1), dtype='float64')
+
+        v1_input = v1_input.numpy()
+        v2_input = v2_input.numpy()
+
+        lambdas = tf.random.normal(shape=(n_columns, 2), dtype='float64')
+
+        lambdas = lambdas.numpy()
+
+        matrix_input = np.zeros(shape=(full_dimension, n_columns))
+        for i in range(n_columns):
+            matrix_input[:,i] = (v1_input * lambdas[i, 0] + v2_input * lambdas[i, 1]).reshape(full_dimension)
+
+
     # Create a compositor to extend Keras layers with gradient function
     def GradExtender(base, call_fnc, grad_fnc):
         class LayerExtension(base):
@@ -657,22 +676,37 @@ def example_custom_grad_multi_layer():
                 for i in range(1, len(self.layers)):
                     m_grad_pred = m_grad_pred @ self.layers[i].gradient
 
+                # # Compute our own loss
+                # loss_d = self.diff_loss(y, y_pred)
+                # loss_m = self.grad_loss(m_grad, m_grad_pred)
+
                 # Compute our own loss
-                loss_d = self.diff_loss(y, y_pred)
-                loss_m = self.grad_loss(m_grad, m_grad_pred)
+                loss = self.grad_loss(m_grad, m_grad_pred)
+                # loss = self.combind_loss(y, y_pred, m_grad, m_grad_pred)
+
+            # # Compute gradients
+            # trainable_vars = self.trainable_variables
+            # gradients_d = tape.gradient(loss_d, trainable_vars)
+            # gradients_m = tape.gradient(loss_m, trainable_vars)
+
+            # # Update weights
+            # self.optimizer.apply_gradients(zip(gradients_d, trainable_vars))
+            # self.optimizer.apply_gradients(zip(gradients_m, trainable_vars))
 
             # Compute gradients
             trainable_vars = self.trainable_variables
-            gradients_d = tape.gradient(loss_d, trainable_vars)
-            gradients_m = tape.gradient(loss_m, trainable_vars)
+            gradients = tape.gradient(loss, trainable_vars)
 
             # Update weights
-            self.optimizer.apply_gradients(zip(gradients_d, trainable_vars))
-            self.optimizer.apply_gradients(zip(gradients_m, trainable_vars))
+            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
             # Compute our own metrics
-            loss_tracker.update_state(loss_d, loss_m)
-            mse_metric.update_state(y, y_pred)
+            # loss_tracker.update_state(loss_d, loss_m)
+            loss_tracker.update_state(loss)
+
+            # Update metrics
+            # mse_metric.update_state(y, y_pred)
+            mse_metric.update_state(m_grad, m_grad_pred)
             return {"loss": loss_tracker.result(), "mse": mse_metric.result()}
 
         @property
@@ -690,22 +724,25 @@ def example_custom_grad_multi_layer():
 
     ### Sample Run ###
 
-    num_vars    = 10
-    num_samples = num_vars * 20
+    num_vars = 8
+    num_samples = num_vars * 50
 
     full_size = num_vars
-    enc_size = 10
+    enc_size = 8
+
+    normalized1, norm1 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(num_vars, enc_size))))
+    normalized2, norm2 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(enc_size, num_vars))))
 
     ideal_layer_weights = [
-          tf.abs(tf.random.normal(shape=(num_vars, enc_size)))
-        , tf.abs(tf.random.normal(shape=(enc_size, num_vars)))
+          normalized1
+        , normalized2
     ]
 
     m_grad = ideal_layer_weights[0]
     for l in ideal_layer_weights[1:]:
         m_grad = m_grad @ l
 
-    input  = tf.abs(tf.random.normal(shape=(num_samples, num_vars)))
+    input, norm_input = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(num_samples, num_vars))))
 
     print("Input Shape:", input.shape)
 
@@ -715,19 +752,19 @@ def example_custom_grad_multi_layer():
 
     model = GradModel(
         [
-              ReLULayerProto(enc_size,  activation="relu", name="LinearDense1", use_bias=True)
-            , ReLULayerProto(full_size, activation="relu", name="LinearDense2", use_bias=True)
+              LineLayerProto(enc_size,  activation="linear", name="LinearDense1", use_bias=False)
+            , LineLayerProto(full_size, activation="linear", name="LinearDense2", use_bias=False)
         ]
     )
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.005, amsgrad=True),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.1, amsgrad=True),
         run_eagerly=True
     )
 
     model.fit(
         input, exact_result,
-        epochs=20,
+        epochs=5,
         batch_size=1
     )
 
@@ -735,7 +772,9 @@ def example_custom_grad_multi_layer():
     print("\nCalc:", exact_result[0], "\nPred:", model(np.array([input[0]])))
     print("\nGradients:")
     m_grad_pred = model.layers[0].weights[0]
+    print("\nLayer0:", model.layers[0].weights[0])
     for i in range(1, len(model.layers)):
+        print("\nLayer"+str(i)+";", model.layers[i].weights[0])
         m_grad_pred = m_grad_pred @ model.layers[i].weights[0]
     print("\nIdeal:", m_grad, "\nNet  :", m_grad_pred)
 
