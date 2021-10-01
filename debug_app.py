@@ -631,6 +631,7 @@ def example_custom_grad_multi_layer():
             if outputs[0,i] > 0:
                 grad_vals[i,i] = 1.0
 
+        # This is ***possibly*** wrong and was working because the 2x2 example was symetric
         # if self.use_bias:
         #     gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
         # else:
