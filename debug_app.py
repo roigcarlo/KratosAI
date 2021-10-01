@@ -659,12 +659,16 @@ def example_custom_grad_multi_layer():
     mse_metric = keras.metrics.MeanSquaredError(name="mse")
 
     class GradModel(keras.Sequential):
+        # Only mean square error of the data
         def diff_loss(self, y_true, y_pred):
             return (y_true - y_pred) ** 2
 
+        # Only mean square error of the gradients
         def grad_loss(self, m_true, m_pred):
             return (m_true - m_pred) ** 2
 
+        # Combiner mean square error of the data and the gradients using reduce_mean
+        # in the sum
         def combind_loss(self, y_true, y_pred, g_true, g_pred):
             diff_loss = self.diff_loss(y_true, y_pred)
             grad_loss = self.grad_loss(g_true, g_pred)
@@ -674,7 +678,7 @@ def example_custom_grad_multi_layer():
         def train_step(self, data):
             x, y = data
 
-            with tf.GradientTape(persistent=True) as tape:
+            with tf.GradientTape() as tape:
                 # Forward pass
                 y_pred = self(x, training=True)
 
@@ -690,15 +694,6 @@ def example_custom_grad_multi_layer():
                 loss = self.grad_loss(m_grad, m_grad_pred)
                 # loss = self.combind_loss(y, y_pred, m_grad, m_grad_pred)
 
-            # # Compute gradients
-            # trainable_vars = self.trainable_variables
-            # gradients_d = tape.gradient(loss_d, trainable_vars)
-            # gradients_m = tape.gradient(loss_m, trainable_vars)
-
-            # # Update weights
-            # self.optimizer.apply_gradients(zip(gradients_d, trainable_vars))
-            # self.optimizer.apply_gradients(zip(gradients_m, trainable_vars))
-
             # Compute gradients
             trainable_vars = self.trainable_variables
             gradients = tape.gradient(loss, trainable_vars)
@@ -707,11 +702,9 @@ def example_custom_grad_multi_layer():
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
             # Compute our own metrics
-            # loss_tracker.update_state(loss_d, loss_m)
             loss_tracker.update_state(loss)
 
             # Update metrics
-            # mse_metric.update_state(y, y_pred)
             mse_metric.update_state(m_grad, m_grad_pred)
             return {"loss": loss_tracker.result(), "mse": mse_metric.result()}
 
