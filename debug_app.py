@@ -494,7 +494,7 @@ def example_custom_grad():
         grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
         for i in range(outputs.shape[1]):
             if outputs[0,i] > 0:
-                grad_vals[i:i] = 1.0
+                grad_vals[i,i] = 1.0
 
         if self.use_bias:
             gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
@@ -563,7 +563,7 @@ def example_custom_grad():
 
     model = GradModel(
         [
-            LineLayerProto(num_vars, activation="relu", name="LinearDense", use_bias=True)
+            LineLayerProto(2, activation="relu", name="LinearDense", use_bias=True)
         ]
     )
 
@@ -610,12 +610,17 @@ def example_custom_grad_multi_layer():
         grad_vals = np.zeros((outputs.shape[1], outputs.shape[1]))
         for i in range(outputs.shape[1]):
             if outputs[0,i] > 0:
-                grad_vals[i:i] = 1.0
+                grad_vals[i,i] = 1.0
+
+        # if self.use_bias:
+        #     gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        # else:
+        #     gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
 
         if self.use_bias:
-            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+            gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32") + self.weights[1]
         else:
-            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+            gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32")
 
         return gradient
 
@@ -626,37 +631,49 @@ def example_custom_grad_multi_layer():
 
     # Create a custom Model:
     loss_tracker = keras.metrics.Mean(name="loss")
-    mae_metric = keras.metrics.MeanAbsoluteError(name="mae")
+    mse_metric = keras.metrics.MeanSquaredError(name="mse")
 
     class GradModel(keras.Sequential):
         def diff_loss(self, y_true, y_pred):
             return (y_true - y_pred) ** 2
 
-        def grad_loss(self, y_true, y_pred):
-            return (y_true - y_pred) ** 2
+        def grad_loss(self, m_true, m_pred):
+            return (m_true - m_pred) ** 2
+
+        def combind_loss(self, y_true, y_pred, g_true, g_pred):
+            diff_loss = self.diff_loss(y_true, y_pred)
+            grad_loss = self.grad_loss(g_true, g_pred)
+
+            return tf.math.reduce_mean(diff_loss) + tf.math.reduce_mean(grad_loss)
 
         def train_step(self, data):
             x, y = data
 
-            with tf.GradientTape() as tape:
+            with tf.GradientTape(persistent=True) as tape:
                 # Forward pass
                 y_pred = self(x, training=True)
 
+                m_grad_pred = self.layers[0].gradient
+                for i in range(1, len(self.layers)):
+                    m_grad_pred = m_grad_pred @ self.layers[i].gradient
+
                 # Compute our own loss
-                # loss = self.diff_loss(y, y_pred)
-                loss = self.grad_loss(a, self.layers[0].gradient)
+                loss_d = self.diff_loss(y, y_pred)
+                loss_m = self.grad_loss(m_grad, m_grad_pred)
 
             # Compute gradients
             trainable_vars = self.trainable_variables
-            gradients = tape.gradient(loss, trainable_vars)
+            gradients_d = tape.gradient(loss_d, trainable_vars)
+            gradients_m = tape.gradient(loss_m, trainable_vars)
 
             # Update weights
-            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+            self.optimizer.apply_gradients(zip(gradients_d, trainable_vars))
+            self.optimizer.apply_gradients(zip(gradients_m, trainable_vars))
 
             # Compute our own metrics
-            loss_tracker.update_state(loss)
-            mae_metric.update_state(y, y_pred)
-            return {"loss": loss_tracker.result(), "mae": mae_metric.result()}
+            loss_tracker.update_state(loss_d, loss_m)
+            mse_metric.update_state(y, y_pred)
+            return {"loss": loss_tracker.result(), "mse": mse_metric.result()}
 
         @property
         def metrics(self):
@@ -665,7 +682,7 @@ def example_custom_grad_multi_layer():
             # or at the start of `evaluate()`.
             # If you don't implement this property, you have to call
             # `reset_states()` yourself at the time of your choosing.
-            return [loss_tracker, mae_metric]
+            return [loss_tracker, mse_metric]
 
     # Create GradientLayers Protos
     LineLayerProto = GradExtender(keras.layers.Dense, CallWithGrads, LineGrad)
@@ -673,38 +690,54 @@ def example_custom_grad_multi_layer():
 
     ### Sample Run ###
 
-    num_samples = 100
-    num_vars    = 2
+    num_vars    = 10
+    num_samples = num_vars * 20
 
-    a     = np.array([[1.0, 2.0], [3.0, 4.0]])
-    # a     = tf.random.normal(shape=(num_vars, 1))
-    input = tf.abs(tf.random.normal(shape=(num_samples, num_vars)))
+    full_size = num_vars
+    enc_size = 10
+
+    ideal_layer_weights = [
+          tf.abs(tf.random.normal(shape=(num_vars, enc_size)))
+        , tf.abs(tf.random.normal(shape=(enc_size, num_vars)))
+    ]
+
+    m_grad = ideal_layer_weights[0]
+    for l in ideal_layer_weights[1:]:
+        m_grad = m_grad @ l
+
+    input  = tf.abs(tf.random.normal(shape=(num_samples, num_vars)))
 
     print("Input Shape:", input.shape)
 
-    exact_result = input @ a
+    exact_result = input
+    for l in ideal_layer_weights:
+        exact_result = exact_result @ l
 
     model = GradModel(
         [
-            LineLayerProto(num_vars, activation="relu", name="LinearDense", use_bias=True)
+              ReLULayerProto(enc_size,  activation="relu", name="LinearDense1", use_bias=True)
+            , ReLULayerProto(full_size, activation="relu", name="LinearDense2", use_bias=True)
         ]
     )
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.01, amsgrad=False),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.005, amsgrad=True),
         run_eagerly=True
     )
 
     model.fit(
         input, exact_result,
-        epochs=50,
+        epochs=20,
         batch_size=1
     )
 
-    # print("SP norm error", np.linalg.norm(SP-S)/np.linalg.norm(S))
-
-    print("\nA:", exact_result[0], "\nB:", model(np.array([input[0]])))
-    # print(model.layers[0].weights)
+    print("\nResults:")
+    print("\nCalc:", exact_result[0], "\nPred:", model(np.array([input[0]])))
+    print("\nGradients:")
+    m_grad_pred = model.layers[0].weights[0]
+    for i in range(1, len(model.layers)):
+        m_grad_pred = m_grad_pred @ model.layers[i].weights[0]
+    print("\nIdeal:", m_grad, "\nNet  :", m_grad_pred)
 
 if __name__ == "__main__":
 
