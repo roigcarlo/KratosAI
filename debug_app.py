@@ -600,7 +600,6 @@ def example_custom_grad_multi_layer():
         for i in range(n_columns):
             matrix_input[:,i] = (v1_input * lambdas[i, 0] + v2_input * lambdas[i, 1]).reshape(full_dimension)
 
-
     # Create a compositor to extend Keras layers with gradient function
     def GradExtender(base, call_fnc, grad_fnc):
         class LayerExtension(base):
@@ -618,10 +617,16 @@ def example_custom_grad_multi_layer():
         for i in range(outputs.shape[1]):
             grad_vals[i,i] = 1.0
 
+        # This is ***possibly*** wrong and was working because the 2x2 example was symetric
+        # if self.use_bias:
+        #     gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+        # else:
+        #     gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+
         if self.use_bias:
-            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0] + self.weights[1]
+            gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32") + self.weights[1]
         else:
-            gradient = tf.Variable(grad_vals, dtype="float32") @ self.weights[0]
+            gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32")
 
         return gradient
 
