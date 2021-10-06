@@ -47,7 +47,7 @@ class Network(abc.ABC):
         return np.concatenate((data, noise_data), axis=0)
 
     def prepare_data(self, input_data, num_files):
-        data = np.transpose(input_data[0])
+        data = np.transpose(input_data)
 
         print("Data shape:", data.shape)
         print("RAW - Min:", np.min(data), "Max:", np.max(data))
@@ -65,14 +65,14 @@ class Network(abc.ABC):
         train_samples = np.array(train_pre)
         valid_samples = np.array(valid_pre)
 
-        train_samples = self.expand_dataset(train_samples)
+        # train_samples = self.expand_dataset(train_samples, 1)
 
         train_dataset = np.asarray(train_samples)
         valid_dataset = np.asarray(valid_samples)
 
-        return train_dataset, valid_dataset
+        return train_samples, valid_samples
 
-    def train_network(self, model, input_data, num_files):
+    def train_network(self, model, input_data, grad_data, num_files):
         train_dataset, valid_dataset = self.prepare_data(input_data, num_files)
 
         # Shuffle the snapshots to prevent batches from the same clusters
@@ -80,12 +80,13 @@ class Network(abc.ABC):
         np.random.shuffle(valid_dataset)
 
         # Train the model
+        model.grads = grad_data
         model.fit(
             train_dataset, train_dataset,
-            epochs=1,
-            batch_size=1,
-            shuffle=True,                                   # Probably not needed as we already shuffle.
-            validation_data=(valid_dataset, valid_dataset),
+            epochs=10
+            # batch_size=1,
+            # shuffle=True,                                   # Probably not needed as we already shuffle.
+            # validation_data=(valid_dataset, valid_dataset),
         )
 
     def train_with_gradient(self, network, loss, input_data, num_files):
