@@ -662,23 +662,31 @@ def example_custom_grad_multi_layer():
         # Only mean square error of the data
         def diff_loss(self, y_true, y_pred):
             return (y_true - y_pred) ** 2
-
-        # Only mean square error of the gradients
-        def grad_loss(self, m_true, m_pred):
-            return (m_true - m_pred) ** 2
+    
+        # Norm
+        def norm_loss(self, a, b):
+            return tf.norm(a-b)/tf.norm(a)
 
         # Combiner mean square error of the data and the gradients using reduce_mean
         # in the sum
-        def combind_loss(self, y_true, y_pred, g_true, g_pred):
-            diff_loss = self.diff_loss(y_true, y_pred)
-            grad_loss = self.grad_loss(g_true, g_pred)
+        def combined_loss(self, y_true, y_pred, g_true, g_pred):
+            data_loss = self.diff_loss(y_true, y_pred)
+            grad_loss = self.diff_loss(g_true, g_pred)
 
-            return tf.math.reduce_mean(diff_loss) + tf.math.reduce_mean(grad_loss)
+            return tf.math.reduce_mean(data_loss) + tf.math.reduce_mean(grad_loss)
+
+        # Combined norm loss
+        def combined_norm_loss(self, y_true, y_pred, g_true, g_pred):
+            data_loss = self.norm_loss(y_true, y_pred)
+            grad_loss = self.norm_loss(g_true, g_pred)
+
+            return data_loss + grad_loss
+
 
         def train_step(self, data):
             x, y = data
 
-            with tf.GradientTape() as tape:
+            with tf.GradientTape(persistent=True) as tape:
                 # Forward pass
                 y_pred = self(x, training=True)
 
@@ -691,8 +699,15 @@ def example_custom_grad_multi_layer():
                 # loss_m = self.grad_loss(m_grad, m_grad_pred)
 
                 # Compute our own loss
-                loss = self.grad_loss(m_grad, m_grad_pred)
-                # loss = self.combind_loss(y, y_pred, m_grad, m_grad_pred)
+                # loss = self.grad_loss(m_grad, m_grad_pred)
+                loss = self.combined_loss(y, y_pred, m_grad, m_grad_pred)
+                # loss_n = self.combined_norm_loss(y, y_pred, m_grad, m_grad_pred)
+
+                # h = tf.keras.losses.Huber()
+                # lhd = h(y, y_pred)
+                # lhg = h(m_grad, m_grad_pred)
+
+                # loss = lhg
 
             # Compute gradients
             trainable_vars = self.trainable_variables
@@ -706,6 +721,7 @@ def example_custom_grad_multi_layer():
 
             # Update metrics
             mse_metric.update_state(m_grad, m_grad_pred)
+            # mse_metric.update_state(x, y_pred)
             return {"loss": loss_tracker.result(), "mse": mse_metric.result()}
 
         @property
@@ -727,7 +743,7 @@ def example_custom_grad_multi_layer():
     num_samples = 100
 
     full_size = num_vars
-    enc_size = 10
+    enc_size = 5
 
     normalized1, norm1 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(num_vars, enc_size))))
     normalized2, norm2 = tf.linalg.normalize(tf.abs(tf.random.normal(shape=(enc_size, num_vars))))
@@ -752,7 +768,7 @@ def example_custom_grad_multi_layer():
     model = GradModel(
         [
               LineLayerProto(enc_size,  activation="linear", name="LinearDense1", use_bias=False)
-            , LineLayerProto(full_size, activation="linear", name="LinearDense2", use_bias=False)
+            , LineLayerProto(full_size, activation="linear", name="LinearDenseF", use_bias=False)
         ]
     )
 
@@ -763,7 +779,7 @@ def example_custom_grad_multi_layer():
 
     model.fit(
         input, exact_result,
-        epochs=5,
+        epochs=10,
         batch_size=1
     )
 
@@ -780,7 +796,6 @@ def example_custom_grad_multi_layer():
     result = model(np.array([input[0]]))
     print("\nCalc:", expect, "\nPred:", result)
     print("\nCompression:", (1-enc_size/num_vars)*100, "%\tNorm Error:", np.linalg.norm(expect-result)/np.linalg.norm(expect))
-
 if __name__ == "__main__":
 
     # print("\n =========================================================== ")

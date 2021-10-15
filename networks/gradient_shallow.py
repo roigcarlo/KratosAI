@@ -28,9 +28,9 @@ def LineGrad(self, outputs):
         grad_vals[i,i] = 1.0
 
     if self.use_bias:
-        gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32") + self.weights[1]
+        gradient = self.weights[0] @ grad_vals + self.weights[1]
     else:
-        gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32")
+        gradient = self.weights[0] @ grad_vals
 
     return gradient
 
@@ -41,9 +41,9 @@ def ReluGrad(self, outputs):
             grad_vals[i,i] = 1.0
 
     if self.use_bias:
-        gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32") + self.weights[1]
+        gradient = self.weights[0] @ grad_vals + self.weights[1]
     else:
-        gradient = self.weights[0] @ tf.Variable(grad_vals, dtype="float32")
+        gradient = self.weights[0] @ grad_vals
 
     return gradient
 
@@ -95,8 +95,17 @@ class GradModel(keras.Sequential):
             for i in range(1, len(self.layers)):
                 m_grad_pred = m_grad_pred @ self.layers[i].gradient
 
+            print(f'{m_grad_pred.shape=}')
+            print(f'{y.shape=}')
+
             # # Compute our own loss
-            loss = self.combined_loss(y, y_pred, m_grad, m_grad_pred)
+            # loss = self.combined_loss(y, y_pred, m_grad, m_grad_pred)
+            loss = self.diff_loss(x, y_pred)
+
+        # print("Loss:", loss)
+        # tf.print("x", x)
+        # tf.print("yp", y_pred)
+        # exit(0)
 
         # Compute gradients
         trainable_vars = self.trainable_variables
@@ -109,8 +118,8 @@ class GradModel(keras.Sequential):
         loss_tracker.update_state(loss)
 
         # Update metrics
-        mse_metric.update_state(m_grad, m_grad_pred)
-        # mse_metric.update_state(x, y_pred)
+        # mse_metric.update_state(m_grad, m_grad_pred)
+        mse_metric.update_state(x, y_pred)
         return {"loss": loss_tracker.result(), "mse": mse_metric.result()}
 
     @property
@@ -161,14 +170,17 @@ class GradientShallow(network.Network):
 
     def define_network(self, input_data, custom_loss):
         data = np.transpose(input_data)
+        
+        decoded_size = data.shape[1]
+        encoded_size = 5
 
         ## Create our NN
-        encoder = self.create_encoder(1024, 5)
-        decoder = self.create_decoder(1024, 5)
+        encoder = self.create_encoder(decoded_size, encoded_size)
+        decoder = self.create_decoder(decoded_size, encoded_size)
 
         autoencoder = self.create_autoencoder(encoder, decoder)
 
-        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.1, amsgrad=False))
+        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.01, amsgrad=False), run_eagerly=False)
 
         return autoencoder
 
@@ -188,10 +200,24 @@ class GradientShallow(network.Network):
 
     def predict_snapshot(self, network, snapshot):
 
-        input_snap = (snapshot.T - self.data_min) / (self.data_max - self.data_min)
-        predicted_snap = network.predict(input_snap) * (self.data_max - self.data_min) + self.data_min
+        return (network.predict(snapshot.T)).T
 
-        return predicted_snap.T
+    def train_network(self, model, input_data, grad_data, num_files):
+        # train_dataset, valid_dataset = self.prepare_data(input_data, num_files)
+
+        # Shuffle the snapshots to prevent batches from the same clusters
+        # np.random.shuffle(train_dataset)
+        # np.random.shuffle(valid_dataset)
+
+        # Train the model
+        model.grads = grad_data
+        model.fit(
+            input_data.T, grad_data.T,
+            epochs=10,
+            batch_size=1,
+            # shuffle=True,
+            # validation_data=(valid_dataset, valid_dataset),
+        )
 
     def calculate_gradients():
         return None
