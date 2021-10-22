@@ -66,12 +66,12 @@ if __name__ == "__main__":
     ]
 
     config = {
-        "load_model":   False,
-        "train_model":  True,
-        "save_model":   True,
+        "load_model":       False,
+        "train_model":      True,
+        "save_model":       True,
+        "print_results":    True
     }
 
-    kratos_network = gradient_shallow_ae.GradientShallow()
     S = kratos_io.build_snapshot_grid(
         data_inputs, 
         [
@@ -80,6 +80,7 @@ if __name__ == "__main__":
         ]
     )
 
+    kratos_network = gradient_shallow_ae.GradientShallow()
     kratos_io.print_npy_snapshot(S, True)
 
     print("S", S.shape)
@@ -99,57 +100,67 @@ if __name__ == "__main__":
 
     kratos_network.calculate_data_limits(SReduced)
 
+    # Set the properties for the clusters
+    num_clusters=1      # Number of different bases chosen
+    num_cluster_col=5  # If I use num_cluster_col = num_variables result should be exact.
+
     if config["load_model"]:
         autoencoder = tf.keras.models.load_model(kratos_network.model_name, custom_objects={"custom_loss":custom_loss})
     else:
-        autoencoder = kratos_network.define_network(SReduced, custom_loss_cluster)
+        autoencoder = kratos_network.define_network(SReduced, custom_loss_cluster, num_cluster_col)
 
-    c_data = (SReduced - kratos_network.data_min) / (kratos_network.data_max - kratos_network.data_min)
+    # Prepare the data
+    SReducedNormalized = (SReduced - kratos_network.data_min) / (kratos_network.data_max - kratos_network.data_min)
 
     # Obtain Clusters
-    num_clusters=5
-    num_cluster_col=5
     print("=== Calculating Cluster Bases ===")
     with contextlib.redirect_stdout(None):
         cluster_bases, kmeans_object = clustering.calcualte_snapshots_with_columns(
-            snapshot_matrix=c_data,
+            snapshot_matrix=SReducedNormalized,
             number_of_clusters=num_clusters,
             number_of_columns_in_the_basis=num_cluster_col
         )
 
-    print(" -> Generated {} cluster bases with shapes:".format(len(cluster_bases)))
+    print(f" -> Generated {len(cluster_bases)=} cluster bases with shapes:")
     for base in cluster_bases:
-        print(base, "-->", cluster_bases[base].shape)
+        print(f' ---> {base=} has {cluster_bases[base].shape=}')
+        # print(base, "-->", cluster_bases[base].shape)
 
     # Obtain the reduced representations (that would be our G's)
-    q = {}
-    s = {}
+    q, s, c = {}, {}, {}
     total_respresentations = 0
+
     for i in range(num_clusters):
-        # q[i] = cluster_bases[i].T @ SReduced[:,kmeans_object.labels_==i]
-        q[i] = cluster_bases[i] @ cluster_bases[i].T # @ SReduced[:,kmeans_object.labels_==i]
+        q[i] = cluster_bases[i].T @ SReduced[:,kmeans_object.labels_==i]
+        c[i] = cluster_bases[i] @ cluster_bases[i].T
         s[i] = SReduced[:,kmeans_object.labels_==i]
         total_respresentations += np.shape(q[i])[1]
-        print("Reduced representations:", np.shape(q[i]))
-
-    print(f'{q.shape=}')
-    print(f'{SReduced.shape=}')
+        print("Reduced representations:", np.shape(c[i]))
 
     print("Total number of representations:", total_respresentations)
 
-    temp_size = 54
+    temp_size = num_cluster_col
+    grad_size = 54
     qc = np.empty(shape=(temp_size,0))
     sc = np.empty(shape=(data_rows,0))
+    cc = np.empty(shape=(grad_size,0))
 
     for i in range(num_clusters):
         qc = np.concatenate((qc, q[i]), axis=1)
         sc = np.concatenate((sc, s[i]), axis=1)
+        cc = np.concatenate((cc, c[i]), axis=1)
 
     nqc = kratos_network.normalize_data(qc)
     nsc = kratos_network.normalize_data(sc)
+    ncc = kratos_network.normalize_data(cc)
 
-    print("Qc and Sc matrices:")
-    print(np.shape(nqc), np.shape(nsc))
+    print(f"{np.shape(nqc)=}")
+    print(f"{np.shape(nsc)=}")
+    print(f"{np.shape(ncc)=}")
+
+    r = SReduced.T[0] @ c[0]
+
+    print(f"Norm error using any of the {num_clusters} clusters: {np.linalg.norm(r-SReduced.T[0])/np.linalg.norm(SReduced.T[0])}")
 
     # autoencoder.summary()
 
@@ -162,23 +173,42 @@ if __name__ == "__main__":
     decoder = autoencoder.layers[1]
 
     if config["train_model"]:
+        autoencoder.set_m_grad(c[0])
         kratos_network.train_network(autoencoder, nsc, nqc, len(data_inputs))
 
     if config["save_model"]:
         autoencoder.save(kratos_network.model_name)
+
+    # ============ This is a test ============
+    # Force the autoencoder to have the wieghs
+    # equal to the ones of the clusters calc
+    # (the nn is sequentia so I need to run a fit step before setting the values to initialize it)
+
+    # Without bias
+    # autoencoder.layers[0].set_weights([cluster_bases[0]])
+    # autoencoder.layers[1].set_weights([cluster_bases[0].T])
+
+    # With bias
+    autoencoder.layers[0].set_weights([cluster_bases[0], np.zeros(shape=autoencoder.layers[0].get_weights()[1].shape)])
+    autoencoder.layers[1].set_weights([cluster_bases[0].T, np.zeros(shape=autoencoder.layers[1].get_weights()[1].shape)])
+
+    # Retrain with the correct weights
+    kratos_network.train_network(autoencoder, nsc, nqc, len(data_inputs), 50)
+    # ========================================
 
     # # Use the network
     # SEncoded = kratos_network.encode_snapshot(encoder, SReduced)        # This is q,  or g(u)
     # SDecoded = kratos_network.decode_snapshot(decoder, SEncoded)        # This is u', or f(q), or f(g(u)) 
 
     # Verify that results are correct
-    to_predict = np.array([nsc[:,1]])
+    to_predict = np.array([nsc.T[0]])
 
     NSPredict = kratos_network.predict_snapshot(autoencoder, nsc)        # This is u', or f(q), or f(g(u)) 
-    SPredict = kratos_network.denormalize_data(NSPredict)
+    SPredict  = kratos_network.denormalize_data(NSPredict)
 
-    print(to_predict)
-    print(SPredict)
+    # Compare a snap in the middle
+    print(nsc.T[100])
+    print(NSPredict.T[100])
 
     # # This should be 0. (これはゼロでなければなりません)
     # if np.count_nonzero(SDecoded - SPredict):
@@ -208,9 +238,14 @@ if __name__ == "__main__":
     print("SP Shape:", SP.shape)
 
     print("SP norm error", np.linalg.norm(SP-S)/np.linalg.norm(S))
+    # print("GR norm error", np.linalg.norm(autoencoder.m_grad_pred-autoencoder.m_grad)/np.linalg.norm(autoencoder.m_grad))
 
-    # current_model = KMP.Model()
-    # model_part = current_model.CreateModelPart("main_model_part")
+    print(autoencoder.m_grad_pred)
+    print(autoencoder.m_grad)
 
-    # kratos_io.create_out_mdpa(model_part, "GidExampleSwaped")
-    # kratos_io.print_results_to_gid(model_part, S.T, SP.T)
+    if config["print_results"]:
+        current_model = KMP.Model()
+        model_part = current_model.CreateModelPart("main_model_part")
+
+        kratos_io.create_out_mdpa(model_part, "GidExampleSwaped")
+        kratos_io.print_results_to_gid(model_part, S.T, SP.T)

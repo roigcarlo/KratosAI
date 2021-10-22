@@ -82,19 +82,3 @@ scenario_2() # exp in tape in tape              - Ok
 scenario_3() # exp in tape and tape after exp   - Fail
 scenario_4() # exp before tape                  - Fail
 scenario_5() # exp after tape                   - Fail
-
-# opt = tf.keras.optimizers.Adam(learning_rate=0.1)
-# var1 = tf.Variable(10.0)
-
-# def f(x) = x**2
-
-# def loss(x):
-#     output = f(x)
-#     with tf.tape as tape:
-#         grad = tape.gradient(out, x) 
-
-#     return output + grad * grad
-# loss = lambda: (f(var1) tape.grad(f(var(1),var1)))/2.0       # d(loss)/d(var1) == var1
-# step_count = opt.minimize(loss, [var1]).numpy()
-# # The first step is `-learning_rate*sign(grad)`
-# var1.numpy()

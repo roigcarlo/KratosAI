@@ -54,7 +54,7 @@ def CallWithGrads(self, inputs):
 
 # Create GradientLayers Protos
 LineLayerProto = GradExtender(keras.layers.Dense, CallWithGrads, LineGrad)
-ReLULayerProto = GradExtender(keras.layers.Dense, CallWithGrads, ReluGrad)
+# LeakyReLULayerProto = GradExtender(keras.layers.LeakyRelu, CallWithGrads, ReluGrad)
 
 # Create a custom Model:
 loss_tracker = keras.metrics.Mean(name="loss")
@@ -68,6 +68,9 @@ class GradModel(keras.Sequential):
     # Norm
     def norm_loss(self, a, b):
         return tf.norm(a-b)/tf.norm(a)
+
+    def set_m_grad(self, m_grad):
+        self.m_grad = m_grad
 
     # Combiner mean square error of the data and the gradients using reduce_mean
     # in the sum
@@ -95,12 +98,15 @@ class GradModel(keras.Sequential):
             for i in range(1, len(self.layers)):
                 m_grad_pred = m_grad_pred @ self.layers[i].gradient
 
-            print(f'{m_grad_pred.shape=}')
-            print(f'{y.shape=}')
+            self.m_grad_pred = m_grad_pred
 
-            # # Compute our own loss
-            # loss = self.combined_loss(y, y_pred, m_grad, m_grad_pred)
-            loss = self.diff_loss(x, y_pred)
+            # print(f'{m_grad_pred=}')
+            # print(f'{(self.m_grad-m_grad_pred)**2=}')
+
+            # Compute our own loss
+            # loss = self.combined_loss(y, y_pred, self.m_grad, m_grad_pred)
+            loss = self.diff_loss(self.m_grad, m_grad_pred)
+            # loss = self.diff_loss(x, y_pred)
 
         # print("Loss:", loss)
         # tf.print("x", x)
@@ -147,13 +153,13 @@ class GradientShallow(network.Network):
 
     def create_encoder(self, decoded_dim, encoded_dim):
 
-        encoder = LineLayerProto(encoded_dim,  activation="linear", name="LinearDense1", use_bias=False)
+        encoder = LineLayerProto(encoded_dim,  activation="relu", name="LinearDense1", use_bias=True)
 
         return encoder
 
     def create_decoder(self, decoded_dim, encoded_dim):
 
-        decoder = LineLayerProto(decoded_dim, activation="linear", name="LinearDenseF", use_bias=False)
+        decoder = LineLayerProto(decoded_dim, activation="sigmoid", name="LinearDenseF", use_bias=True)
 
         return decoder
 
@@ -168,11 +174,11 @@ class GradientShallow(network.Network):
 
         return model
 
-    def define_network(self, input_data, custom_loss):
+    def define_network(self, input_data, custom_loss, encoded_size):
         data = np.transpose(input_data)
         
         decoded_size = data.shape[1]
-        encoded_size = 5
+        # encoded_size = 54
 
         ## Create our NN
         encoder = self.create_encoder(decoded_size, encoded_size)
@@ -180,7 +186,7 @@ class GradientShallow(network.Network):
 
         autoencoder = self.create_autoencoder(encoder, decoder)
 
-        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.01, amsgrad=False), run_eagerly=False)
+        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.0001, amsgrad=False), run_eagerly=False)
 
         return autoencoder
 
@@ -202,18 +208,12 @@ class GradientShallow(network.Network):
 
         return (network.predict(snapshot.T)).T
 
-    def train_network(self, model, input_data, grad_data, num_files):
-        # train_dataset, valid_dataset = self.prepare_data(input_data, num_files)
-
-        # Shuffle the snapshots to prevent batches from the same clusters
-        # np.random.shuffle(train_dataset)
-        # np.random.shuffle(valid_dataset)
-
+    def train_network(self, model, input_data, grad_data, num_files, epochs=1):
         # Train the model
         model.grads = grad_data
         model.fit(
-            input_data.T, grad_data.T,
-            epochs=10,
+            input_data.T, input_data.T,
+            epochs=epochs,
             batch_size=1,
             # shuffle=True,
             # validation_data=(valid_dataset, valid_dataset),
