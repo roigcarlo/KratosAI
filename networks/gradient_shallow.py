@@ -27,10 +27,7 @@ def LineGrad(self, outputs):
     for i in range(outputs.shape[1]):
         grad_vals[i,i] = 1.0
 
-    if self.use_bias:
-        gradient = self.weights[0] @ grad_vals + self.weights[1]
-    else:
-        gradient = self.weights[0] @ grad_vals
+    gradient = self.weights[0] @ grad_vals
 
     return gradient
 
@@ -40,10 +37,7 @@ def ReluGrad(self, outputs):
         if outputs[0,i] > 0:
             grad_vals[i,i] = 1.0
 
-    if self.use_bias:
-        gradient = self.weights[0] @ grad_vals + self.weights[1]
-    else:
-        gradient = self.weights[0] @ grad_vals
+    gradient = self.weights[0] @ grad_vals
 
     return gradient
 
@@ -61,9 +55,13 @@ loss_tracker = keras.metrics.Mean(name="loss")
 mse_metric = keras.metrics.MeanSquaredError(name="mse")
 
 class GradModel(keras.Sequential):
-    # Only mean square error of the data
+    # Mean square error of the data
     def diff_loss(self, y_true, y_pred):
         return (y_true - y_pred) ** 2
+
+    # Absolute error of the data
+    def abs_loss(self, y_true, y_pred):
+        return tf.abs(y_true - y_pred)
 
     # Norm
     def norm_loss(self, a, b):
@@ -78,7 +76,10 @@ class GradModel(keras.Sequential):
         data_loss = self.diff_loss(y_true, y_pred)
         grad_loss = self.diff_loss(g_true, g_pred)
 
-        return tf.math.reduce_mean(data_loss) + tf.math.reduce_mean(grad_loss)
+        grad_weight = 1
+
+        # return tf.math.reduce_mean(tf.math.maximum(data_loss, grad_loss))
+        return (1 - grad_weight) * tf.math.reduce_mean(data_loss) + (grad_weight) * tf.math.reduce_mean(grad_loss)
 
     # Combined norm loss
     def combined_norm_loss(self, y_true, y_pred, g_true, g_pred):
@@ -104,8 +105,8 @@ class GradModel(keras.Sequential):
             # print(f'{(self.m_grad-m_grad_pred)**2=}')
 
             # Compute our own loss
-            # loss = self.combined_loss(y, y_pred, self.m_grad, m_grad_pred)
-            loss = self.diff_loss(self.m_grad, m_grad_pred)
+            loss = self.combined_loss(y, y_pred, self.m_grad, m_grad_pred)
+            # loss = self.diff_loss(self.m_grad, m_grad_pred)
             # loss = self.diff_loss(x, y_pred)
 
         # print("Loss:", loss)
@@ -186,7 +187,7 @@ class GradientShallow(network.Network):
 
         autoencoder = self.create_autoencoder(encoder, decoder)
 
-        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.0001, amsgrad=False), run_eagerly=False)
+        autoencoder.compile(loss=custom_loss, optimizer=tf.keras.optimizers.Adam(lr=0.0025*1, amsgrad=True), run_eagerly=False)
 
         return autoencoder
 
