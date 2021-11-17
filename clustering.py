@@ -101,10 +101,11 @@ def calcualte_snapshots(snapshot_matrix, number_of_clusters=1, add_overlapping=F
 
     return bases, sub_snapshots
 
-def calcualte_snapshots_with_columns(snapshot_matrix, number_of_clusters=1, number_of_columns_in_the_basis=None):
+def calcualte_snapshots_with_columns(snapshot_matrix, number_of_clusters=1, number_of_columns_in_the_basis=None, truncation_tolerance=1e-4):
 
     # Clustering
     kmeans = KMeans(n_clusters=number_of_clusters).fit(snapshot_matrix.T)
+    print(f'{kmeans=}')
     # Add random_state=0 to the KMeans initialization to get consistent results
 
     # Split snapshots into sub-sets
@@ -112,17 +113,21 @@ def calcualte_snapshots_with_columns(snapshot_matrix, number_of_clusters=1, numb
     for i in range(number_of_clusters):
         sub_snapshots[i] = snapshot_matrix[:,kmeans.labels_==i]
 
+    # print(f'{sub_snapshots=}')
+    print(f'{len(sub_snapshots)=}')
+    # exit()
+
     # Calcualte the svd of each cluster and obtain its modes
     bases={}
     q = {}
-    if number_of_columns_in_the_basis is None:
-        truncation_tolerance = 1e-4
-    else:
+    
+    if number_of_columns_in_the_basis is not None:
         truncation_tolerance = 0
 
     for i in range(number_of_clusters):
         bases[i],_,_,_ = RandomizedSingularValueDecomposition().Calculate(sub_snapshots[i],truncation_tolerance)
         if number_of_columns_in_the_basis is not None:
+            # print(f'{bases[i].shape[1]=}, {number_of_columns_in_the_basis=}')
             if bases[i].shape[1]<number_of_columns_in_the_basis:
                 raise Exception(f'There are no {number_of_columns_in_the_basis} linearly independent columns spaning the range of cluster {i}')
             bases[i] = bases[i][:,:number_of_columns_in_the_basis]

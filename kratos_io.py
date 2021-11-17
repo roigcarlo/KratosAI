@@ -54,13 +54,13 @@ def read_snapshot_from_h5py_as_tensor(file_path, variables):
                 if variable == "PRESSURE":
                     row = np.concatenate((row, np.array(nodal_solution_dataset[variable]).reshape((nodal_size,1))), axis=1)
                 if variable == "VELOCITY":
-                    row = np.concatenate((row, np.array(nodal_solution_dataset[variable])), axis=1)
+                    row = np.concatenate((row, np.array(nodal_solution_dataset[variable][:,:2])), axis=1)
 
             row = np.reshape(row, (row.shape[0] * row.shape[1]))
             data.append(row)
 
 
-    return np.array(data)
+    return np.array(data[:200])
 
 def build_snapshot_grid(result_files, variables):
     data = None
@@ -143,19 +143,19 @@ def print_results_to_gid(model_part, snapshot_matrix, predicted_matrix):
             # print("Snapshot size items:", len(snapshot), "-->", len(snapshot) / 3)
 
             i = 0
-            c = 3
+            c = 2
             for node in model_part.Nodes:
                 node.SetSolutionStepValue(KMP.VELOCITY_X,0,snapshot[i*c+0])
                 node.SetSolutionStepValue(KMP.VELOCITY_Y,0,snapshot[i*c+1])
-                node.SetSolutionStepValue(KMP.VELOCITY_Z,0,snapshot[i*c+2])
+                # node.SetSolutionStepValue(KMP.VELOCITY_Z,0,snapshot[i*c+2])
 
                 node.SetSolutionStepValue(KMP.MESH_VELOCITY_X,0,predicted[i*c+0])
                 node.SetSolutionStepValue(KMP.MESH_VELOCITY_Y,0,predicted[i*c+1])
-                node.SetSolutionStepValue(KMP.MESH_VELOCITY_Z,0,predicted[i*c+2])
+                # node.SetSolutionStepValue(KMP.MESH_VELOCITY_Z,0,predicted[i*c+2])
 
                 node.SetSolutionStepValue(KMP.EMBEDDED_VELOCITY_X,0,abs(snapshot[i*c+0]-predicted[i*c+0]))
                 node.SetSolutionStepValue(KMP.EMBEDDED_VELOCITY_Y,0,abs(snapshot[i*c+1]-predicted[i*c+1]))
-                node.SetSolutionStepValue(KMP.EMBEDDED_VELOCITY_Z,0,abs(snapshot[i*c+2]-predicted[i*c+2]))
+                # node.SetSolutionStepValue(KMP.EMBEDDED_VELOCITY_Z,0,abs(snapshot[i*c+2]-predicted[i*c+2]))
 
                 i += 1
 
