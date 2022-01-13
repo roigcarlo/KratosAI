@@ -47,9 +47,10 @@ def main():
         "text.usetex": True
     })
 
+    plt.title('$f(q)=||f(q+\\epsilon{}dq)-f(q)-\\nabla{}f|_{q}\\epsilon{}dq||$')
     plt.legend(loc="upper left")
     plt.xlabel('$log(\\epsilon{})$')
-    plt.ylabel('$log(||f(q+\\epsilon{}dq)-f(q)-\\nabla{}f|_{q}\\epsilon{}dq||)$')
+    plt.ylabel('$log(f(q))$')
     plt.show()
 
 if __name__ == "__main__":
