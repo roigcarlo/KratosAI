@@ -2,20 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 ''' Function to be evaluated '''
-def f(q_0,q_1):
-    return q_0**3+3*q_1**2
+def f(q):
+    return np.array([q[0]**3,3*q[1]**2])
 
 ''' First derivative of f(q) '''
-def df(q_0,q_1):
-    return 3*q_0**2+6*q_1
+def df(q):
+    return np.array([3*q[0]**2,6*q[1]])
 
 ''' How to compute x axis values '''
 def xAxis(q,dq,ε):
-    return np.log(ε)
+    return np.array([np.log(ε[i][0]) for i in range(10)])
 
 ''' How to compute y axis values '''
 def yAxis(q,dq,ε):
-    return np.log(np.linalg.norm(f(q+ε*dq) - f(q) - df(q)*ε*dq))
+    return np.array([np.log(np.linalg.norm(f(q+ε[i]*dq) - f(q) - df(q)*ε[i]*dq)) for i in range(10)])
 
 ''' Calculate Slope '''
 def slope(x,y):
@@ -24,13 +24,14 @@ def slope(x,y):
 ''' Check that gradient slope is correct '''
 def main():
     # Get dq something small
-    dq = 1e-6
+    dq = np.array([1e-6, 1e-6])
 
     # Get a range of ε values to evaluate the gradient at
-    ε  = np.linspace(1,10,10) 
+    ε  = [np.array([e+1,e+1]) for e in range(10)]
 
     # Evaluate at different points
-    for q in np.linspace(1,10,10):
+    for c in np.linspace(1,10,10):
+        q = np.array([c,c])
         
         # Get the x,y axis values for the plot
         x  = xAxis(q,dq,ε)
