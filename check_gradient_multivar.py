@@ -43,9 +43,9 @@ def main():
         # Plot
         plt.plot(xAxis(q,dq,ε), yAxis(q,dq,ε), label=f'at q={q}, slope={s:0.2f}')
     
-    plt.rcParams.update({
-        "text.usetex": True
-    })
+    # plt.rcParams.update({
+    #     "text.usetex": True
+    # })
 
     plt.title('$f(q)=||f(q+\\epsilon{}dq)-f(q)-\\nabla{}f|_{q}\\epsilon{}dq||$')
     plt.legend(loc="upper left")
