@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Results explorer</h1>
+  <ul>
+    <!-- <li><strong>dirs:</strong> {{ list_of_files.0 }} </li> -->
+  </ul>
+
+  <div id="chart_display_1" style="width:800px; height:600px;"></div>
+{% endblock %}
+
+{% block postload %}
+  <script>
+    var range = $('.input-range');
+    let my_series = {{list_of_files}};
+
+    range.on('input', function(){
+
+      
+      let this_series = my_series[this.value]
+      console.log(this_series)
+      let this_series_len = this_series[0].length;
+    
+      new Dygraph(
+        document.getElementById("chart_display_1"),
+        function() {
+          var zp = function(x) { if (x < 10) return "0"+x; else return x; };
+          var r = "x,PRED,LF,HF\n";
+
+          for (var i = 1; i < this_series_len; i++) {
+            this_series[0][i] += 0.0000000001 * i;
+          }
+          
+          for (var i = 1; i < this_series_len; i++) {
+            r +=       this_series[0][i];
+            r += "," + this_series[1][i];
+            r += "," + this_series[2][i];
+            r += "," + this_series[3][i];
+            r += "\n";
+          }
+
+          return r;
+        },
+        {
+          legend: 'always',
+          series: {
+            'HF': {
+              strokeWidth: 0.0,
+              drawPoints: true,
+              pointSize: 4,
+              highlightCircleSize: 6
+            },
+            'PRED': {
+              strokeWidth: 0.0,
+              drawPoints: true,
+              pointSize: 4,
+              highlightCircleSize: 6
+            },
+            'LF': {
+              strokeWidth: 0.0,
+              drawPoints: true,
+              pointSize: 4,
+              highlightCircleSize: 6
+            }
+          }
+        }
+      );
+
+
+
+    }); 
+
+  </script>
+{% endblock %}

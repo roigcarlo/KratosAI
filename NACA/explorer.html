@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chart Visualization</title>
+    <style>
+        .chart {
+            width: 720;
+            height: 500;
+            border: 1px solid #ccc;
+            margin: 10px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chart Visualization</h1>
+
+    <div id="chartContainer">
+        <!-- Add your chart elements dynamically here -->
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Sample data for demonstration
+        var chartData = [[
+            // Chart 1
+            {
+                id: 1,
+                title: "XFoil",
+                data_x: [0, 1, 2, 3, 4, 5],
+                data_y: [5, 6, 12, 8, 2, 0]
+            },
+            {
+                id: 2,
+                title: "Kratos",
+                data_x: [0, 1, 2, 3, 4, 5],
+                data_y: [9, 3, 6, 2, 8, 20]
+            },
+            {
+                id: 1,
+                title: "Prediction",
+                data_x: [0, 1, 2, 3, 4, 5],
+                data_y: [5, 8, 3, 1, 7, 12]
+            },
+        ]];
+
+        // Generate chart elements dynamically based on the data
+        var chartContainer = document.getElementById("chartContainer");
+        chartData.forEach(function(chart) {
+            var chartElement = document.createElement("div");
+            chartElement.id = "chart" + chart.id;
+            chartElement.className = "chart";
+            chartElement.innerHTML = "<h3>" + chart.title + "</h3>";
+            chartContainer.appendChild(chartElement);
+
+            // Create a canvas element for the chart
+            var canvas = document.createElement("canvas");
+            canvas.id = "canvas" + chart.id;
+            chartElement.appendChild(canvas);
+
+            // Create a new chart using Chart.js
+            var ctx = canvas.getContext("2d");
+            new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: chart.title,
+                        data: chart[0].data_x.map((e, i) => ({"x": chart[0].data_x[i], "y": chart[0].data_y[i]})),
+                        backgroundColor: 'rgba(0, 0, 255, 0.5)', // Customize the chart colors
+                        borderColor: 'rgba(0, 0, 255, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: chart.title,
+                        data: chart[1].data_x.map((e, i) => ({"x": chart[1].data_x[i], "y": chart[1].data_y[i]})),
+                        backgroundColor: 'rgba(0, 123, 0, 0.5)', // Customize the chart colors
+                        borderColor: 'rgba(0, 123, 0, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: chart.title,
+                        data: chart[2].data_x.map((e, i) => ({"x": chart[2].data_x[i], "y": chart[2].data_y[i]})),
+                        backgroundColor: 'rgba(200, 10, 255, 0.5)', // Customize the chart colors
+                        borderColor: 'rgba(200, 10, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Case []'
+                    }
+                    }
+                }
+            });
+        });
+
+        // Function to handle selection/unselection of charts
+        function toggleSelection(chartId) {
+            var chartElement = document.getElementById("chart" + chartId);
+            chartElement.classList.toggle("selected");
+        }
+    </script>
+</body>
+</html>
